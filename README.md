@@ -13,7 +13,9 @@
 - [Concepts fondamentaux](#concepts-fondamentaux)
 - [Ordre strict des arguments](#ordre-strict-des-arguments)
 - [Utilisation de base](#utilisation-de-base)
+- [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
 - [Structure des résultats](#structure-des-résultats)
+- [SignatureStructureVO](#signaturestructurevo)
 - [Les parseurs](#les-parseurs)
 - [Extensibilité](#extensibilité)
 - [Exemples](#exemples)
@@ -154,6 +156,44 @@ print_r($result);
 
 ---
 
+## Extraction manuelle des éléments
+
+Le parser expose deux méthodes publiques pour extraire les éléments sans lancer tout le parsing :
+
+### `extractSignatureElements(string $signature): array`
+
+Extrait tous les éléments d'une signature sans les accolades.
+
+```php
+$parser = new SignatureParser();
+$elements = $parser->extractSignatureElements('backup {source} {destination} {format=zip} {excludes*} {--force}');
+
+// Résultat :
+// ['backup', 'source', 'destination', 'format=zip', 'excludes*', '--force']
+```
+
+### `extractQueryElements(string $query): array`
+
+Extrait tous les éléments d'une requête en conservant les crochets pour les variadiques.
+
+```php
+$parser = new SignatureParser();
+$elements = $parser->extractQueryElements('backup /var/www /backup tar.gz [cache, logs, tmp] --force');
+
+// Résultat :
+// ['backup', '/var/www', '/backup', 'tar.gz', '[cache, logs, tmp]', '--force']
+```
+
+### Cas d'usage
+
+Ces méthodes sont utiles pour :
+
+- **Debugging** : Visualiser les éléments extraits
+- **Intégration** : Réutiliser la logique d'extraction dans d'autres composants
+- **Validation** : Vérifier la structure avant de lancer le parsing complet
+
+---
+
 ## Structure des résultats
 
 ```php
@@ -185,6 +225,75 @@ print_r($result);
         'verbose' => false,
     ],
 ]
+```
+
+---
+
+## SignatureStructureVO
+
+Le package fournit un Value Object pour analyser UNIQUEMENT la structure d'une signature (sans requête).
+
+### Utilisation
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
+
+$vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excludes*} {--force}');
+
+echo $vo->getSource();          // 'backup'
+print_r($vo->getRequireds());   // ['source', 'destination']
+print_r($vo->getDefaults());    // ['format' => 'zip']
+print_r($vo->getVariadics());   // ['excludes']
+print_r($vo->getOptions());     // ['force']
+```
+
+### Méthodes
+
+| Méthode | Retour | Description |
+|---------|--------|-------------|
+| `getSource()` | `string` | Nom de la commande |
+| `getRequireds()` | `array` | Liste des arguments requis |
+| `getDefaults()` | `array` | Arguments avec valeur par défaut (`['format' => 'zip']`) |
+| `getVariadics()` | `array` | Liste des arguments variadiques |
+| `getOptions()` | `array` | Liste des options |
+| `hasRequired(string $name)` | `bool` | Vérifie si un argument requis existe |
+| `hasDefault(string $name)` | `bool` | Vérifie si un argument par défaut existe |
+| `hasVariadic(string $name)` | `bool` | Vérifie si un argument variadique existe |
+| `hasOption(string $name)` | `bool` | Vérifie si une option existe |
+| `countArguments()` | `int` | Nombre total d'arguments (hors source et options) |
+| `hasRequireds()` | `bool` | Vérifie s'il y a des arguments requis |
+| `hasDefaults()` | `bool` | Vérifie s'il y a des arguments par défaut |
+| `hasVariadics()` | `bool` | Vérifie s'il y a des arguments variadiques |
+| `hasOptions()` | `bool` | Vérifie s'il y a des options |
+| `getRaw()` | `string` | Retourne la signature brute |
+| `getValue()` | `StrictDataObject` | Retourne toute la structure sous forme d'objet typé |
+| `equals($other)` | `bool` | Compare deux `SignatureStructureVO` |
+
+### Exemple complet
+
+```php
+$vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {output=dist} {excludes*} {--force}');
+
+// Structure
+$structure = $vo->getValue();
+echo $structure->source;        // 'backup'
+echo $structure->required[0];   // 'source'
+echo $structure->required[1];   // 'destination'
+echo $structure->default->format; // 'zip'
+echo $structure->default->output; // 'dist'
+echo $structure->variadic[0];   // 'excludes'
+echo $structure->options[0];    // 'force'
+
+// Vérifications
+if ($vo->hasRequired('source')) {
+    echo "Source is required";
+}
+
+if ($vo->hasDefault('format')) {
+    echo "Format has default: " . $vo->getDefaults()['format'];
+}
 ```
 
 ---
@@ -316,28 +425,14 @@ $result = $parser->parse($signature, $query);
 // $result['options']['force'] = true
 ```
 
----
-
-## Value Object
-
-Le package fournit également un `SignatureVO` pour un accès typé :
+### SignatureStructureVO pour l'analyse de structure
 
 ```php
-<?php
+$vo = new SignatureStructureVO('deploy {env=production} {--force}');
 
-use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
-
-$vo = new SignatureVO(
-    'backup {source} {destination} {format=zip} {excludes*} {--force}',
-    'backup /var/www /backup tar.gz [cache, logs] --force'
-);
-
-echo $vo->getSource();                      // 'backup'
-echo $vo->getRequired('source');           // '/var/www'
-echo $vo->getDefault('format');            // 'tar.gz'
-print_r($vo->getVariadic('excludes'));     // ['cache', 'logs']
-var_dump($vo->getOption('force'));         // true
-var_dump($vo->hasOption('verbose'));       // false
+echo $vo->getSource();          // 'deploy'
+print_r($vo->getDefaults());    // ['env' => 'production']
+print_r($vo->getOptions());     // ['force']
 ```
 
 ---
