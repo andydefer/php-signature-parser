@@ -66,7 +66,7 @@ final class SignatureParser
         return $result;
     }
 
-    private function extractSignatureElements(string $signature): array
+    public function extractSignatureElements(string $signature): array
     {
         preg_match_all('/\{([^}]+)\}|(\S+)/', $signature, $matches);
         $result = [];
@@ -82,7 +82,7 @@ final class SignatureParser
         return $result;
     }
 
-    private function extractQueryElements(string $query): array
+    public function extractQueryElements(string $query): array
     {
         $parts = explode(' ', $query);
         $result = [];
