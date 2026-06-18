@@ -118,7 +118,6 @@ final class SignatureStructureVOTest extends TestCase
         $vo = new SignatureStructureVO('backup {source} {format=zip} {excludes*} {--force}');
 
         $value = $vo->getValue();
-        dd($value->default);
 
         $this->assertInstanceOf(StrictDataObject::class, $value);
         $this->assertEquals('backup', $value->source);
