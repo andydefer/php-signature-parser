@@ -1,0 +1,36 @@
+{
+    "name": "andydefer/php-signature-parser",
+    "description": "A flexible signature parser for CLI commands",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Andy Defer",
+            "email": "andykanidimbu@gmail.com"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "andydefer/domain-structures": "^1.19"
+    },
+    "autoload": {
+        "psr-4": {
+            "AndyDefer\\SignatureParser\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "AndyDefer\\SignatureParser\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "require-dev": {
+        "laravel/pint": "^1.29",
+        "phpunit/phpunit": "^13.2",
+        "rector/rector": "^2.4",
+        "symfony/var-dumper": "^8.1"
+    }
+}
