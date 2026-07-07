@@ -1,6 +1,6 @@
 # PHP Signature Parser
 
-**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les variadiques et les options avec des Value Objects et des collections typées.**
+**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les variadiques et les options avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^`.**
 
 [![PHP Version](https://img.shields.io/badge/PHP-8.1%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -11,18 +11,19 @@
 
 1. [Installation](#installation)
 2. [Concepts fondamentaux](#concepts-fondamentaux)
-3. [Ordre strict des arguments](#ordre-strict-des-arguments)
-4. [Utilisation du parseur](#utilisation-du-parseur)
-5. [Value Objects](#value-objects)
+3. [Formatage des espaces avec `^`](#formatage-des-espaces-avec-)
+4. [Ordre strict des arguments](#ordre-strict-des-arguments)
+5. [Utilisation du parseur](#utilisation-du-parseur)
+6. [Value Objects](#value-objects)
    - [SignatureStructureVO](#signaturestructurevo)
    - [SignatureVO](#signaturevo)
-6. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
-7. [Les parseurs internes](#les-parseurs-internes)
-8. [Extensibilité](#extensibilité)
-9. [Cas d'usage avancés](#cas-dusage-avancés)
-10. [Exemples complets](#exemples-complets)
-11. [Tests](#tests)
-12. [Licence](#licence)
+7. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
+8. [Les parseurs internes](#les-parseurs-internes)
+9. [Extensibilité](#extensibilité)
+10. [Cas d'usage avancés](#cas-dusage-avancés)
+11. [Exemples complets](#exemples-complets)
+12. [Tests](#tests)
+13. [Licence](#licence)
 
 ---
 
@@ -62,6 +63,58 @@ La requête est la commande réelle exécutée par l'utilisateur.
 
 ```php
 $query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models] --force';
+```
+
+---
+
+## Formatage des espaces avec `^`
+
+Le parser remplace automatiquement les caractères `^` par des espaces dans toutes les valeurs extraites.
+
+### Règle simple
+
+> **Pour inclure un espace dans une valeur, utilisez `^` à la place.**
+
+| Saisie utilisateur | Valeur réelle |
+|-------------------|---------------|
+| `John^Doe` | `John Doe` |
+| `Hello^World!` | `Hello World!` |
+| `C:/Program^Files` | `C:/Program Files` |
+| `admin^user` | `admin user` |
+| `PHP^8.4^features` | `PHP 8.4 features` |
+
+### Exemples avec commandes
+
+```bash
+# ❌ Mauvaise syntaxe
+command John Doe          # Deux arguments séparés
+command "John Doe"        # Non supporté
+
+# ✅ Bonne syntaxe
+command John^Doe          # Un seul argument avec espace
+```
+
+### Exemples de code
+
+```php
+// Arguments requis
+$signature = 'user:create {name} {email}';
+$query = 'user:create John^Doe john@example.com';
+
+$result = $parser->parse($signature, $query);
+// $result->required->first()->value = 'John Doe'
+
+// Valeurs par défaut
+$signature = 'user:list {format=zip}';
+$query = 'user:list tar^gz';
+$result = $parser->parse($signature, $query);
+// $result->default->first()->value = 'tar gz'
+
+// Variadiques
+$signature = 'process {files*}';
+$query = 'process [file^1.txt, file^2.txt, my^file^3.txt]';
+$result = $parser->parse($signature, $query);
+// $result->variadic->first()->values = ['file 1.txt', 'file 2.txt', 'my file 3.txt']
 ```
 
 ---
@@ -436,7 +489,7 @@ class SimpleCli
 // Création de l'application
 $app = new SimpleCli();
 
-// Enregistrement d'une commande
+// Enregistrement d'une commande avec espaces dans les valeurs
 $app->register('backup', 'backup {source} {destination} {--force}', function($args, $options) {
     echo "Sauvegarde de {$args['source']} vers {$args['destination']}\n";
     if ($options['force'] ?? false) {
@@ -444,9 +497,9 @@ $app->register('backup', 'backup {source} {destination} {--force}', function($ar
     }
 });
 
-// Exécution
-$app->run('backup /var/www /backup --force');
-// Sauvegarde de /var/www vers /backup
+// Exécution avec espaces via ^
+$app->run('backup /home/user/My^Project /backup --force');
+// Sauvegarde de /home/user/My Project vers /backup
 // Mode forcé activé
 ```
 
@@ -504,6 +557,10 @@ class DocumentationGenerator
                 }
                 $content .= "\n";
             }
+            
+            // Note sur le formatage des espaces
+            $content .= "**Note:** Utilisez `^` pour les espaces dans les valeurs.\n";
+            $content .= "Exemple: `$name John^Doe`\n\n";
         }
         
         return $content;
@@ -521,109 +578,82 @@ echo $docs->generate();
 
 ## Exemples complets
 
-### Exemple 1 : Script de backup
+### Exemple 1 : Script de backup avec espaces
 
 ```php
 <?php
 
 use AndyDefer\SignatureParser\SignatureParser;
 
-// Signature et requête
+// Signature et requête avec espaces dans les valeurs
 $signature = 'backup {source} {destination} {format=zip} {excludes*} {--force}';
-$query = 'backup /var/www /backup tar.gz [cache, logs, tmp] --force';
+$query = 'backup /home/user/My^Project /backup tar^gz [cache^folder, logs^folder] --force';
 
 // Parsing
 $parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
 
 // Affichage structuré
-echo "Source: " . $result->source . "\n";
-echo "Source path: " . $result->required->first()->value . "\n";
-echo "Destination: " . $result->required->last()->value . "\n";
-echo "Format: " . $result->default->first()->value . "\n";
-echo "Excludes: " . implode(', ', $result->variadic->first()->values->toArray()) . "\n";
-echo "Force: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";
-
-// Source: backup
-// Source path: /var/www
-// Destination: /backup
-// Format: tar.gz
-// Excludes: cache, logs, tmp
-// Force: Oui
+echo "Source: " . $result->source . "\n";  // 'backup'
+echo "Source path: " . $result->required->first()->value . "\n";  // '/home/user/My Project'
+echo "Destination: " . $result->required->last()->value . "\n";   // '/backup'
+echo "Format: " . $result->default->first()->value . "\n";        // 'tar gz'
+echo "Excludes: " . implode(', ', $result->variadic->first()->values->toArray()) . "\n";  // 'cache folder, logs folder'
+echo "Force: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";  // 'Oui'
 ```
 
-### Exemple 2 : Commande Git
+### Exemple 2 : Commande utilisateur avec nom complet
 
 ```php
 <?php
 
 use AndyDefer\SignatureParser\SignatureParser;
 
-$signature = 'git {command} {--all} {--force}';
-$query = 'git add --all';
+$signature = 'user:create {name} {email} {--role}';
+$query = 'user:create John^Doe john@example.com --role';
 
 $parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
 
-echo "Source: " . $result->source . "\n";                       // 'git'
-echo "Commande: " . $result->required->first()->value . "\n";   // 'add'
-echo "All: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";   // 'Oui'
-echo "Force: " . ($result->options->last()->value ? 'Oui' : 'Non') . "\n";  // 'Non'
+echo "Source: " . $result->source . "\n";                       // 'user:create'
+echo "Nom: " . $result->required->first()->value . "\n";        // 'John Doe'
+echo "Email: " . $result->required->last()->value . "\n";       // 'john@example.com'
+echo "Role: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";  // 'Oui'
 ```
 
-### Exemple 3 : Commande Docker
+### Exemple 3 : Commande avec message long
 
 ```php
 <?php
 
 use AndyDefer\SignatureParser\SignatureParser;
 
-$signature = 'docker {container} {image} {--detach} {--rm}';
-$query = 'docker run nginx --detach';
+$signature = 'log {level} {message}';
+$query = 'log error [ERROR]^Failed^to^connect^to^database:^Connection^timed^out';
 
 $parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
 
-echo "Source: " . $result->source . "\n";                      // 'docker'
-echo "Container: " . $result->required->first()->value . "\n"; // 'run'
-echo "Image: " . $result->required->last()->value . "\n";      // 'nginx'
-echo "Detach: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n"; // 'Oui'
-echo "Remove: " . ($result->options->last()->value ? 'Oui' : 'Non') . "\n";  // 'Non'
+echo "Niveau: " . $result->required->first()->value . "\n";     // 'error'
+echo "Message: " . $result->required->last()->value . "\n";     // '[ERROR] Failed to connect to database: Connection timed out'
 ```
 
-### Exemple 4 : Utilisation des Value Objects
+### Exemple 4 : Utilisation des Value Objects avec formatage
 
 ```php
 <?php
 
-use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
 
-// 1. Analyser la structure (sans requête)
-$structure = new SignatureStructureVO('deploy {env=production} {--force} {--verbose}');
-
-echo "Commande: " . $structure->getSource() . "\n";  // 'deploy'
-echo "Arguments: " . $structure->countArguments() . "\n";  // 1 (seulement 'env')
-
-if ($structure->hasDefault('env')) {
-    $defaults = $structure->getDefaults();
-    echo "Environnement par défaut: " . $defaults['env'] . "\n";  // 'production'
-}
-
-// 2. Analyser avec la requête
+// Les espaces sont automatiquement formatés dans SignatureVO
 $full = new SignatureVO(
     'deploy {env=production} {--force} {--verbose}',
-    'deploy staging --force'
+    'deploy staging^server --force'
 );
 
-echo "Environnement: " . $full->getDefault('env') . "\n";  // 'staging' (override)
+echo "Environnement: " . $full->getDefault('env') . "\n";  // 'staging server'
 echo "Force: " . ($full->getOption('force') ? 'Oui' : 'Non') . "\n";  // 'Oui'
 echo "Verbose: " . ($full->getOption('verbose') ? 'Oui' : 'Non') . "\n";  // 'Non'
-
-// 3. Vérification des arguments
-if ($full->hasRequired('env')) {
-    echo "L'environnement est fourni: " . $full->getRequired('env') . "\n";
-}
 ```
 
 ---
