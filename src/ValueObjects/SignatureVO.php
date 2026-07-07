@@ -11,10 +11,6 @@ use AndyDefer\DomainStructures\Utils\StrictDataObject;
 use AndyDefer\SignatureParser\SignatureParser;
 use InvalidArgumentException;
 
-/**
- * Value Object représentant une signature de commande CLI et sa requête.
- * Fournit un accès typé aux différentes parties de la commande.
- */
 final class SignatureVO extends AbstractValueObject
 {
     private string $source;
@@ -44,12 +40,35 @@ final class SignatureVO extends AbstractValueObject
         $parser = new SignatureParser;
         $result = $parser->parse($signature, $query);
 
-        $this->source = $result['source'] ?? '';
-        $this->required = $result['required'] ?? [];
-        $this->default = $result['default'] ?? [];
-        $this->variadic = $result['variadic'] ?? [];
-        $this->options = $result['options'] ?? [];
-        $this->parsed = new StrictDataObject($result);
+        $this->source = $result->source;
+
+        $this->required = [];
+        foreach ($result->required as $arg) {
+            $this->required[$arg->name] = $arg->value;
+        }
+
+        $this->default = [];
+        foreach ($result->default as $arg) {
+            $this->default[$arg->name] = $arg->value;
+        }
+
+        $this->variadic = [];
+        foreach ($result->variadic as $arg) {
+            $this->variadic[$arg->name] = $arg->values->toArray();
+        }
+
+        $this->options = [];
+        foreach ($result->options as $opt) {
+            $this->options[$opt->name] = $opt->value;
+        }
+
+        $this->parsed = new StrictDataObject([
+            'source' => $this->source,
+            'required' => $this->required,
+            'default' => $this->default,
+            'variadic' => $this->variadic,
+            'options' => $this->options,
+        ]);
     }
 
     public function getSource(): string

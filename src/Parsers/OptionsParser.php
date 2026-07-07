@@ -1,16 +1,15 @@
 <?php
 
-// src/Parsers/OptionsParser.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\Parsers;
 
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
+use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 
 final class OptionsParser implements ParserInterface
 {
-    public function parse(array $signature, array $query): array
+    public function parse(array $signature, array $query): ParsedResultRecord
     {
         $options = [];
         $newSignature = [];
@@ -47,10 +46,10 @@ final class OptionsParser implements ParserInterface
             }
         }
 
-        return [
-            'result' => ['options' => $options],
+        return ParsedResultRecord::from([
+            'data' => ['options' => $options],
             'signature' => $newSignature,
             'query' => $newQuery,
-        ];
+        ]);
     }
 }

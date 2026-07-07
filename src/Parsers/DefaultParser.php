@@ -1,16 +1,15 @@
 <?php
 
-// src/Parsers/DefaultParser.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\Parsers;
 
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
+use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 
 final class DefaultParser implements ParserInterface
 {
-    public function parse(array $signature, array $query): array
+    public function parse(array $signature, array $query): ParsedResultRecord
     {
         $default = [];
         $newSignature = [];
@@ -25,14 +24,11 @@ final class DefaultParser implements ParserInterface
                 $value = $defaultValue;
                 $found = false;
 
-                // Chercher une valeur dans la query
                 for ($i = $queryIndex; $i < $queryCount; $i++) {
                     $current = $query[$i];
-                    // Si on tombe sur un crochet (variadique) ou -- (option), on s'arrête
                     if (str_starts_with($current, '[') || str_starts_with($current, '--')) {
                         break;
                     }
-                    // Si c'est une valeur simple, on la prend
                     if (! empty($current) && ! str_starts_with($current, '[') && ! str_starts_with($current, '--')) {
                         $value = $current;
                         $found = true;
@@ -41,9 +37,8 @@ final class DefaultParser implements ParserInterface
                     }
                 }
 
-                // Si aucune valeur trouvée, on garde la valeur par défaut
                 if (! $found) {
-                    // Ne pas incrémenter queryIndex si aucune valeur n'a été consommée
+                    // Ne pas incrémenter queryIndex
                 }
 
                 $default[$name] = $value;
@@ -58,17 +53,16 @@ final class DefaultParser implements ParserInterface
             }
         }
 
-        // Ajouter le reste de la query
         if ($queryIndex < $queryCount) {
             for ($i = $queryIndex; $i < $queryCount; $i++) {
                 $newQuery[] = $query[$i];
             }
         }
 
-        return [
-            'result' => ['default' => $default],
+        return ParsedResultRecord::from([
+            'data' => ['default' => $default],
             'signature' => $newSignature,
             'query' => $newQuery,
-        ];
+        ]);
     }
 }

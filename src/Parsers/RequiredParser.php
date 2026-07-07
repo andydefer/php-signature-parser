@@ -1,16 +1,15 @@
 <?php
 
-// src/Parsers/RequiredParser.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\Parsers;
 
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
+use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 
 final class RequiredParser implements ParserInterface
 {
-    public function parse(array $signature, array $query): array
+    public function parse(array $signature, array $query): ParsedResultRecord
     {
         $required = [];
         $newSignature = [];
@@ -30,10 +29,10 @@ final class RequiredParser implements ParserInterface
             }
         }
 
-        return [
-            'result' => ['required' => $required],
+        return ParsedResultRecord::from([
+            'data' => ['required' => $required],
             'signature' => $newSignature,
             'query' => $newQuery,
-        ];
+        ]);
     }
 }

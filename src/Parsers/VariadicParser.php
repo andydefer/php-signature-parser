@@ -1,16 +1,15 @@
 <?php
 
-// src/Parsers/VariadicParser.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\Parsers;
 
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
+use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 
 final class VariadicParser implements ParserInterface
 {
-    public function parse(array $signature, array $query): array
+    public function parse(array $signature, array $query): ParsedResultRecord
     {
         $variadic = [];
         $newSignature = [];
@@ -59,10 +58,10 @@ final class VariadicParser implements ParserInterface
             }
         }
 
-        return [
-            'result' => ['variadic' => $variadic],
+        return ParsedResultRecord::from([
+            'data' => ['variadic' => $variadic],
             'signature' => $newSignature,
             'query' => $newQuery,
-        ];
+        ]);
     }
 }
