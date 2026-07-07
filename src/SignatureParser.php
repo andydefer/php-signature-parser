@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace AndyDefer\SignatureParser;
 
 use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
+use AndyDefer\DomainStructures\Normalizers\NormalizerChain;
 use AndyDefer\SignatureParser\Collections\ArgumentCollection;
 use AndyDefer\SignatureParser\Collections\OptionCollection;
 use AndyDefer\SignatureParser\Collections\VariadicArgumentCollection;
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Contracts\ParserRegistryInterface;
 use AndyDefer\SignatureParser\Contracts\SignatureParserInterface;
+use AndyDefer\SignatureParser\Formatters\TextFormatter;
 use AndyDefer\SignatureParser\Parsers\DefaultParser;
 use AndyDefer\SignatureParser\Parsers\OptionsParser;
 use AndyDefer\SignatureParser\Parsers\RequiredParser;
@@ -105,13 +107,17 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             $options->add(new OptionRecord($name, $value));
         }
 
-        return new ParsedSignatureRecord(
-            source: $data['source'] ?? '',
-            required: $required,
-            default: $default,
-            variadic: $variadic,
-            options: $options
-        );
+        $rawData = [
+            'source' => $data['source'] ?? '',
+            'required' => $required,
+            'default' => $default,
+            'variadic' => $variadic,
+            'options' => $options,
+        ];
+
+        $data = TextFormatter::format(NormalizerChain::get()->normalize($rawData));
+
+        return ParsedSignatureRecord::from($data);
     }
 
     public function extractSignatureElements(string $signature): StringTypedCollection

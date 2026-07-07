@@ -30,6 +30,80 @@ final class SignatureParserTest extends TestCase
         $this->assertFalse($result->options->last()->value);
     }
 
+    public function test_replaces_caret_with_space_in_required_arguments(): void
+    {
+        $signature = 'user:create {name} {email}';
+        $query = 'user:create John^Doe john@example.com';
+
+        $parser = new SignatureParser;
+        $result = $parser->parse($signature, $query);
+
+        $this->assertSame('John Doe', $result->required->first()->value);
+        $this->assertSame('john@example.com', $result->required->last()->value);
+    }
+
+    public function test_replaces_caret_with_space_in_default_arguments(): void
+    {
+        $signature = 'user:list {format=zip} {output=dist}';
+        $query = 'user:list tar^gz build^folder';
+
+        $parser = new SignatureParser;
+        $result = $parser->parse($signature, $query);
+
+        $this->assertSame('tar gz', $result->default->first()->value);
+        $this->assertSame('build folder', $result->default->last()->value);
+    }
+
+    public function test_replaces_caret_with_space_in_variadic_arguments(): void
+    {
+        $signature = 'process {files*}';
+        $query = 'process [file^1.txt, file^2.txt, my^file^3.txt]';
+
+        $parser = new SignatureParser;
+        $result = $parser->parse($signature, $query);
+
+        $values = $result->variadic->first()->values->toArray();
+        $this->assertSame(['file 1.txt', 'file 2.txt', 'my file 3.txt'], $values);
+    }
+
+    public function test_replaces_caret_in_mixed_arguments(): void
+    {
+        $signature = 'backup {source} {destination} {format=zip} {excludes*} {--force}';
+        $query = 'backup /home/user/My^Project /backup tar^gz [cache^folder, logs^folder] --force';
+
+        $parser = new SignatureParser;
+        $result = $parser->parse($signature, $query);
+
+        $this->assertSame('/home/user/My Project', $result->required->first()->value);
+        $this->assertSame('/backup', $result->required->last()->value);
+        $this->assertSame('tar gz', $result->default->first()->value);
+        $this->assertSame(['cache folder', 'logs folder'], $result->variadic->first()->values->toArray());
+        $this->assertTrue($result->options->first()->value);
+    }
+
+    public function test_keeps_text_without_caret_unchanged(): void
+    {
+        $signature = 'user:create {name} {email}';
+        $query = 'user:create John john@example.com';
+
+        $parser = new SignatureParser;
+        $result = $parser->parse($signature, $query);
+
+        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('john@example.com', $result->required->last()->value);
+    }
+
+    public function test_replaces_multiple_carets_in_same_value(): void
+    {
+        $signature = 'user:create {name}';
+        $query = 'user:create John^Michael^Doe';
+
+        $parser = new SignatureParser;
+        $result = $parser->parse($signature, $query);
+
+        $this->assertSame('John Michael Doe', $result->required->first()->value);
+    }
+
     public function test_extracts_signature_elements(): void
     {
         $signature = 'backup {source} {destination} {format=zip} {--force}';
