@@ -1,3 +1,4 @@
+```markdown
 # PHP Signature Parser
 
 **Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les variadiques et les options avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^`.**
@@ -14,16 +15,20 @@
 3. [Formatage des espaces avec `^`](#formatage-des-espaces-avec-)
 4. [Ordre strict des arguments](#ordre-strict-des-arguments)
 5. [Utilisation du parseur](#utilisation-du-parseur)
-6. [Value Objects](#value-objects)
+6. [Manipulation des collections](#manipulation-des-collections)
+   - [ArgumentCollection](#argumentcollection)
+   - [OptionCollection](#optioncollection)
+   - [VariadicArgumentCollection](#variadicargumentcollection)
+7. [Value Objects](#value-objects)
    - [SignatureStructureVO](#signaturestructurevo)
    - [SignatureVO](#signaturevo)
-7. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
-8. [Les parseurs internes](#les-parseurs-internes)
-9. [Extensibilité](#extensibilité)
-10. [Cas d'usage avancés](#cas-dusage-avancés)
-11. [Exemples complets](#exemples-complets)
-12. [Tests](#tests)
-13. [Licence](#licence)
+8. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
+9. [Les parseurs internes](#les-parseurs-internes)
+10. [Extensibilité](#extensibilité)
+11. [Cas d'usage avancés](#cas-dusage-avancés)
+12. [Exemples complets](#exemples-complets)
+13. [Tests](#tests)
+14. [Licence](#licence)
 
 ---
 
@@ -201,6 +206,170 @@ foreach ($result->options as $opt) {
 }
 // force: true
 // verbose: false
+```
+
+---
+
+## Manipulation des collections
+
+Le résultat du parseur (`ParsedSignatureRecord`) contient 4 collections typées qui offrent des méthodes utilitaires pour interagir avec les données.
+
+### ArgumentCollection
+
+Collection d'arguments (`ArgumentRecord`) avec leurs noms et valeurs.
+
+```php
+use AndyDefer\SignatureParser\Collections\ArgumentCollection;
+use AndyDefer\SignatureParser\Records\ArgumentRecord;
+
+$collection = new ArgumentCollection();
+$collection->add(
+    new ArgumentRecord('source', '/var/www'),
+    new ArgumentRecord('destination', '/backup'),
+    new ArgumentRecord('format', 'tar.gz')
+);
+
+// Récupérer une valeur par nom
+$source = $collection->get('source');        // '/var/www'
+$unknown = $collection->get('unknown');      // null
+
+// Vérifier si un argument existe
+if ($collection->has('destination')) {
+    echo "Destination définie";
+}
+
+// Récupérer tous les noms
+$names = $collection->getNames();            // ['source', 'destination', 'format']
+
+// Récupérer toutes les valeurs
+$values = $collection->getValues();          // ['/var/www', '/backup', 'tar.gz']
+
+// Convertir en tableau associatif
+$assoc = $collection->toAssociativeArray();  // ['source' => '/var/www', 'destination' => '/backup', 'format' => 'tar.gz']
+```
+
+#### Cas d'usage : Récupération d'arguments dans une commande
+
+```php
+$source = $result->required->get('source');
+$destination = $result->required->get('destination');
+
+if (!$result->required->has('source')) {
+    throw new \Exception("Source argument is required");
+}
+
+// Transformer en tableau associatif pour une API
+$payload = $result->required->toAssociativeArray();
+```
+
+---
+
+### OptionCollection
+
+Collection d'options (`OptionRecord`) avec leurs noms et valeurs booléennes.
+
+```php
+use AndyDefer\SignatureParser\Collections\OptionCollection;
+use AndyDefer\SignatureParser\Records\OptionRecord;
+
+$collection = new OptionCollection();
+$collection->add(
+    new OptionRecord('force', true),
+    new OptionRecord('verbose', false),
+    new OptionRecord('all', true)
+);
+
+// Récupérer la valeur d'une option
+$force = $collection->get('force');          // true
+$verbose = $collection->get('verbose');      // false
+$unknown = $collection->get('unknown');      // false (par défaut)
+
+// Vérifier si une option existe
+if ($collection->has('force')) {
+    echo "Option force présente";
+}
+
+// Vérifier si une option est active
+if ($collection->isActive('force')) {
+    echo "Mode force activé";
+}
+
+// Récupérer toutes les options actives
+$active = $collection->getActiveNames();     // ['force', 'all']
+
+// Récupérer tous les noms
+$names = $collection->getNames();            // ['force', 'verbose', 'all']
+
+// Convertir en tableau associatif
+$assoc = $collection->toAssociativeArray();  // ['force' => true, 'verbose' => false, 'all' => true]
+```
+
+#### Cas d'usage : Validation des options
+
+```php
+// Vérification des options requises
+if (!$result->options->isActive('force')) {
+    echo "L'option --force est requise pour cette opération";
+}
+
+// Liste des options actives
+$activeOptions = $result->options->getActiveNames();
+echo "Options actives: " . implode(', ', $activeOptions);
+```
+
+---
+
+### VariadicArgumentCollection
+
+Collection d'arguments variadiques (`VariadicArgumentRecord`) avec leurs noms et listes de valeurs.
+
+```php
+use AndyDefer\SignatureParser\Collections\VariadicArgumentCollection;
+use AndyDefer\SignatureParser\Records\VariadicArgumentRecord;
+use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
+
+$collection = new VariadicArgumentCollection();
+$collection->add(
+    new VariadicArgumentRecord('excludes', StringTypedCollection::from(['cache', 'logs', 'tmp'])),
+    new VariadicArgumentRecord('includes', StringTypedCollection::from(['src', 'tests']))
+);
+
+// Récupérer les valeurs d'un argument variadique
+$excludes = $collection->get('excludes');    // ['cache', 'logs', 'tmp']
+$unknown = $collection->get('unknown');      // []
+
+// Vérifier si un argument variadique existe
+if ($collection->has('excludes')) {
+    echo "Excludes défini";
+}
+
+// Récupérer tous les noms
+$names = $collection->getNames();            // ['excludes', 'includes']
+
+// Récupérer toutes les valeurs (aplatit tout)
+$allValues = $collection->getAllValues();    // ['cache', 'logs', 'tmp', 'src', 'tests']
+
+// Compter le nombre total de valeurs
+$total = $collection->countAllValues();      // 5
+
+// Convertir en tableau associatif
+$assoc = $collection->toAssociativeArray();  // ['excludes' => ['cache', 'logs', 'tmp'], 'includes' => ['src', 'tests']]
+```
+
+#### Cas d'usage : Traitement des fichiers en lot
+
+```php
+// Traitement des fichiers
+$files = $result->variadic->get('files');
+foreach ($files as $file) {
+    echo "Processing: $file\n";
+}
+
+// Vérification s'il y a des fichiers à traiter
+if ($result->variadic->has('files')) {
+    $count = $result->variadic->countAllValues();
+    echo "Traitement de $count fichiers...";
+}
 ```
 
 ---
@@ -574,6 +743,52 @@ $docs->addCommand('deploy', 'deploy {env=production} {--force} {--verbose}', 'D�
 echo $docs->generate();
 ```
 
+### Cas 3 : Validation avancée avec les collections
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\SignatureParser;
+
+function validateBackupCommand(string $query): array
+{
+    $parser = new SignatureParser();
+    $result = $parser->parse(
+        'backup {source} {destination} {--force} {--verbose}',
+        $query
+    );
+    
+    $errors = [];
+    
+    // Vérification des arguments requis
+    if (!$result->required->has('source')) {
+        $errors[] = "La source est requise";
+    }
+    
+    if (!$result->required->has('destination')) {
+        $errors[] = "La destination est requise";
+    }
+    
+    // Vérification des options
+    $activeOptions = $result->options->getActiveNames();
+    if (in_array('verbose', $activeOptions) && !in_array('force', $activeOptions)) {
+        $errors[] = "L'option --verbose nécessite --force";
+    }
+    
+    // Vérification des valeurs
+    $source = $result->required->get('source');
+    if ($source && !is_dir($source)) {
+        $errors[] = "Le dossier source n'existe pas: $source";
+    }
+    
+    return $errors;
+}
+
+$errors = validateBackupCommand('backup /var/www /backup --verbose');
+// Erreurs:
+//   - L'option --verbose nécessite --force
+```
+
 ---
 
 ## Exemples complets
@@ -656,8 +871,56 @@ echo "Force: " . ($full->getOption('force') ? 'Oui' : 'Non') . "\n";  // 'Oui'
 echo "Verbose: " . ($full->getOption('verbose') ? 'Oui' : 'Non') . "\n";  // 'Non'
 ```
 
+### Exemple 5 : Manipulation des collections (cas concret)
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\SignatureParser;
+
+$signature = 'process {input} {output} {files*} {--verbose} {--force}';
+$query = 'process input.txt output.txt [file1.txt, file2.txt, file3.txt] --verbose';
+
+$parser = new SignatureParser();
+$result = $parser->parse($signature, $query);
+
+// Récupération des arguments
+$input = $result->required->get('input');
+$output = $result->required->get('output');
+
+// Vérification des arguments obligatoires
+if (!$result->required->has('input')) {
+    throw new \Exception("Input file is required");
+}
+
+// Récupération des fichiers variadiques
+$files = $result->variadic->get('files');
+$totalFiles = $result->variadic->countAllValues();
+
+echo "Input: $input\n";
+echo "Output: $output\n";
+echo "Files to process: " . implode(', ', $files) . "\n";
+echo "Total: $totalFiles fichiers\n";
+
+// Vérification des options
+if ($result->options->isActive('verbose')) {
+    echo "Mode verbose activé\n";
+}
+
+if ($result->options->isActive('force')) {
+    echo "Mode forcé activé\n";
+}
+
+// Liste des options actives
+$activeOptions = $result->options->getActiveNames();
+if (!empty($activeOptions)) {
+    echo "Options actives: " . implode(', ', $activeOptions) . "\n";
+}
+```
+
 ---
 
 ## Licence
 
 MIT © [Andy Defer](https://github.com/andydefer)
+```
