@@ -1,6 +1,6 @@
 # PHP Signature Parser
 
-**Un parseur strict et ordonné pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les variadiques et les options.**
+**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les variadiques et les options avec des Value Objects et des collections typées.**
 
 [![PHP Version](https://img.shields.io/badge/PHP-8.1%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -9,18 +9,20 @@
 
 ## Table des matières
 
-- [Installation](#installation)
-- [Concepts fondamentaux](#concepts-fondamentaux)
-- [Ordre strict des arguments](#ordre-strict-des-arguments)
-- [Utilisation de base](#utilisation-de-base)
-- [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
-- [Structure des résultats](#structure-des-résultats)
-- [SignatureStructureVO](#signaturestructurevo)
-- [Les parseurs](#les-parseurs)
-- [Extensibilité](#extensibilité)
-- [Exemples](#exemples)
-- [Tests](#tests)
-- [Licence](#licence)
+1. [Installation](#installation)
+2. [Concepts fondamentaux](#concepts-fondamentaux)
+3. [Ordre strict des arguments](#ordre-strict-des-arguments)
+4. [Utilisation du parseur](#utilisation-du-parseur)
+5. [Value Objects](#value-objects)
+   - [SignatureStructureVO](#signaturestructurevo)
+   - [SignatureVO](#signaturevo)
+6. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
+7. [Les parseurs internes](#les-parseurs-internes)
+8. [Extensibilité](#extensibilité)
+9. [Cas d'usage avancés](#cas-dusage-avancés)
+10. [Exemples complets](#exemples-complets)
+11. [Tests](#tests)
+12. [Licence](#licence)
 
 ---
 
@@ -87,153 +89,74 @@ $query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models]
 | **Options** | Peuvent être à n'importe quelle position après la source |
 | **Ordre de la requête** | Doit respecter l'ordre de la signature |
 
-### Exemple d'ordre correct
-
-```php
-// ✅ ORDRE CORRECT
-$signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {--force} {--verbose}';
-
-// ❌ ORDRE INCORRECT
-$signature = 'backup {format=zip} {source} {destination}'; // Default avant Requis
-$signature = 'backup {source} {excludes*} {destination}'; // Variadique avant Requis
-```
-
-### Correspondance requête ↔ signature
-
-La requête doit respecter l'ordre de la signature :
-
-```php
-$signature = 'backup {source} {destination} {format=zip} {excludes*} {--force}';
-
-// ✅ CORRECT
-$query = 'backup /var/www /backup tar.gz [cache, logs] --force';
-
-// ❌ INCORRECT - ordre différent
-$query = 'backup /backup /var/www tar.gz [cache, logs] --force';
-```
-
 ---
 
-## Utilisation de base
+## Utilisation du parseur
+
+### Utilisation de base
 
 ```php
 <?php
 
 use AndyDefer\SignatureParser\SignatureParser;
 
+// Définition de la commande
 $signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
+
+// Commande exécutée
 $query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models] --force';
 
+// Parse
 $parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
 
-print_r($result);
+// Accès aux données typées
+echo $result->source;                                      // 'backup'
+echo $result->required->first()->value;                   // '/var/www'
+echo $result->default->first()->value;                    // 'tar.gz'
+echo $result->variadic->first()->values->first();         // 'cache'
+echo $result->options->first()->value;                    // true
 ```
 
-**Résultat :**
+### Parcours des collections
 
 ```php
-[
-    'source' => 'backup',
-    'required' => [
-        'source' => '/var/www',
-        'destination' => '/backup',
-    ],
-    'default' => [
-        'format' => 'tar.gz',
-        'output' => 'dist',
-    ],
-    'variadic' => [
-        'excludes' => ['cache', 'logs', 'tmp'],
-        'purpose' => ['home', 'data', 'models'],
-    ],
-    'options' => [
-        'force' => true,
-        'verbose' => false,
-    ],
-]
+// Parcours des arguments requis
+foreach ($result->required as $arg) {
+    echo "{$arg->name}: {$arg->value}\n";
+}
+// source: /var/www
+// destination: /backup
+
+// Parcours des valeurs par défaut
+foreach ($result->default as $arg) {
+    echo "{$arg->name}: {$arg->value}\n";
+}
+// format: tar.gz
+// output: dist
+
+// Parcours des variadiques
+foreach ($result->variadic as $arg) {
+    echo "{$arg->name}: " . implode(', ', $arg->values->toArray()) . "\n";
+}
+// excludes: cache, logs, tmp
+// purpose: home, data, models
+
+// Parcours des options
+foreach ($result->options as $opt) {
+    echo "{$opt->name}: " . ($opt->value ? 'true' : 'false') . "\n";
+}
+// force: true
+// verbose: false
 ```
 
 ---
 
-## Extraction manuelle des éléments
+## Value Objects
 
-Le parser expose deux méthodes publiques pour extraire les éléments sans lancer tout le parsing :
+### SignatureStructureVO
 
-### `extractSignatureElements(string $signature): array`
-
-Extrait tous les éléments d'une signature sans les accolades.
-
-```php
-$parser = new SignatureParser();
-$elements = $parser->extractSignatureElements('backup {source} {destination} {format=zip} {excludes*} {--force}');
-
-// Résultat :
-// ['backup', 'source', 'destination', 'format=zip', 'excludes*', '--force']
-```
-
-### `extractQueryElements(string $query): array`
-
-Extrait tous les éléments d'une requête en conservant les crochets pour les variadiques.
-
-```php
-$parser = new SignatureParser();
-$elements = $parser->extractQueryElements('backup /var/www /backup tar.gz [cache, logs, tmp] --force');
-
-// Résultat :
-// ['backup', '/var/www', '/backup', 'tar.gz', '[cache, logs, tmp]', '--force']
-```
-
-### Cas d'usage
-
-Ces méthodes sont utiles pour :
-
-- **Debugging** : Visualiser les éléments extraits
-- **Intégration** : Réutiliser la logique d'extraction dans d'autres composants
-- **Validation** : Vérifier la structure avant de lancer le parsing complet
-
----
-
-## Structure des résultats
-
-```php
-[
-    // Source - nom de la commande
-    'source' => 'backup',
-
-    // Arguments requis (nom => valeur)
-    'required' => [
-        'source' => '/var/www',
-        'destination' => '/backup',
-    ],
-
-    // Arguments par défaut (nom => valeur)
-    'default' => [
-        'format' => 'tar.gz',
-        'output' => 'dist',
-    ],
-
-    // Arguments variadiques (nom => tableau de valeurs)
-    'variadic' => [
-        'excludes' => ['cache', 'logs', 'tmp'],
-        'purpose' => ['home', 'data', 'models'],
-    ],
-
-    // Options (nom => booléen)
-    'options' => [
-        'force' => true,
-        'verbose' => false,
-    ],
-]
-```
-
----
-
-## SignatureStructureVO
-
-Le package fournit un Value Object pour analyser UNIQUEMENT la structure d'une signature (sans requête).
-
-### Utilisation
+Analyse UNIQUEMENT la structure d'une signature (sans requête).
 
 ```php
 <?php
@@ -242,85 +165,184 @@ use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 
 $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excludes*} {--force}');
 
+// Accès aux informations
 echo $vo->getSource();          // 'backup'
-print_r($vo->getRequireds());   // ['source', 'destination']
-print_r($vo->getDefaults());    // ['format' => 'zip']
-print_r($vo->getVariadics());   // ['excludes']
-print_r($vo->getOptions());     // ['force']
+
+// Vérification de la présence d'arguments
+if ($vo->hasRequired('source')) {
+    echo "L'argument source est requis\n";
+}
+
+// Récupération des listes
+$requireds = $vo->getRequireds();    // ['source', 'destination']
+$defaults = $vo->getDefaults();      // ['format' => 'zip']
+$variadics = $vo->getVariadics();    // ['excludes']
+$options = $vo->getOptions();        // ['force']
+
+// Structure complète typée
+$structure = $vo->getValue();
+echo $structure->source;             // 'backup'
+echo $structure->default->format;    // 'zip'
 ```
 
-### Méthodes
-
-| Méthode | Retour | Description |
-|---------|--------|-------------|
-| `getSource()` | `string` | Nom de la commande |
-| `getRequireds()` | `array` | Liste des arguments requis |
-| `getDefaults()` | `array` | Arguments avec valeur par défaut (`['format' => 'zip']`) |
-| `getVariadics()` | `array` | Liste des arguments variadiques |
-| `getOptions()` | `array` | Liste des options |
-| `hasRequired(string $name)` | `bool` | Vérifie si un argument requis existe |
-| `hasDefault(string $name)` | `bool` | Vérifie si un argument par défaut existe |
-| `hasVariadic(string $name)` | `bool` | Vérifie si un argument variadique existe |
-| `hasOption(string $name)` | `bool` | Vérifie si une option existe |
-| `countArguments()` | `int` | Nombre total d'arguments (hors source et options) |
-| `hasRequireds()` | `bool` | Vérifie s'il y a des arguments requis |
-| `hasDefaults()` | `bool` | Vérifie s'il y a des arguments par défaut |
-| `hasVariadics()` | `bool` | Vérifie s'il y a des arguments variadiques |
-| `hasOptions()` | `bool` | Vérifie s'il y a des options |
-| `getRaw()` | `string` | Retourne la signature brute |
-| `getValue()` | `StrictDataObject` | Retourne toute la structure sous forme d'objet typé |
-| `equals($other)` | `bool` | Compare deux `SignatureStructureVO` |
-
-### Exemple complet
+#### Cas d'usage : Génération de documentation
 
 ```php
-$vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {output=dist} {excludes*} {--force}');
-
-// Structure
-$structure = $vo->getValue();
-echo $structure->source;        // 'backup'
-echo $structure->required[0];   // 'source'
-echo $structure->required[1];   // 'destination'
-echo $structure->default->format; // 'zip'
-echo $structure->default->output; // 'dist'
-echo $structure->variadic[0];   // 'excludes'
-echo $structure->options[0];    // 'force'
-
-// Vérifications
-if ($vo->hasRequired('source')) {
-    echo "Source is required";
+function generateCommandHelp(string $signature): string
+{
+    $vo = new SignatureStructureVO($signature);
+    
+    $help = "Usage: " . $vo->getSource() . "\n\n";
+    
+    // Arguments requis
+    if ($vo->hasRequireds()) {
+        $help .= "Arguments requis:\n";
+        foreach ($vo->getRequireds() as $arg) {
+            $help .= "  <$arg>\n";
+        }
+        $help .= "\n";
+    }
+    
+    // Arguments avec valeurs par défaut
+    if ($vo->hasDefaults()) {
+        $help .= "Arguments optionnels:\n";
+        foreach ($vo->getDefaults() as $name => $value) {
+            $help .= "  <$name> (défaut: $value)\n";
+        }
+        $help .= "\n";
+    }
+    
+    // Options
+    if ($vo->hasOptions()) {
+        $help .= "Options:\n";
+        foreach ($vo->getOptions() as $opt) {
+            $help .= "  --$opt\n";
+        }
+    }
+    
+    return $help;
 }
 
-if ($vo->hasDefault('format')) {
-    echo "Format has default: " . $vo->getDefaults()['format'];
-}
+// Génère l'aide pour une commande
+echo generateCommandHelp('deploy {env=production} {--force} {--verbose}');
+// Usage: deploy
+// 
+// Arguments optionnels:
+//   <env> (défaut: production)
+// 
+// Options:
+//   --force
+//   --verbose
 ```
 
 ---
 
-## Les parseurs
+### SignatureVO
+
+Analyse complète avec signature ET requête.
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
+
+$vo = new SignatureVO(
+    'backup {source} {destination} {format=zip} {--force}',
+    'backup /var/www /backup tar.gz --force'
+);
+
+// Accès direct aux valeurs
+echo $vo->getSource();                    // 'backup'
+echo $vo->getRequired('source');          // '/var/www'
+echo $vo->getDefault('format');           // 'tar.gz'
+echo $vo->getOption('force');             // true
+
+// Vérification de présence
+if ($vo->hasOption('force')) {
+    echo "Force mode activé\n";
+}
+
+// Récupération complète
+$requireds = $vo->getRequireds();    // ['source' => '/var/www', 'destination' => '/backup']
+$defaults = $vo->getDefaults();      // ['format' => 'tar.gz']
+$options = $vo->getOptions();        // ['force' => true]
+
+// Accès via objet typé
+$parsed = $vo->getParsed();
+echo $parsed->source;                // 'backup'
+echo $parsed->required['source'];    // '/var/www'
+```
+
+#### Cas d'usage : Validation de commande
+
+```php
+function validateCommand(string $signature, string $query): array
+{
+    $vo = new SignatureVO($signature, $query);
+    $errors = [];
+
+    // Vérification des arguments requis
+    foreach ($vo->getRequireds() as $name => $value) {
+        if (empty($value)) {
+            $errors[] = "L'argument '$name' est requis";
+        }
+    }
+
+    // Vérification des options obligatoires
+    if ($vo->hasOption('force') && !$vo->getOption('force')) {
+        $errors[] = "L'option --force est obligatoire";
+    }
+
+    return $errors;
+}
+
+// Validation d'une commande
+$errors = validateCommand(
+    'deploy {env} {--force}',
+    'deploy staging'
+);
+
+if (empty($errors)) {
+    echo "Commande valide\n";
+} else {
+    echo "Erreurs:\n";
+    foreach ($errors as $error) {
+        echo "  - $error\n";
+    }
+}
+// Erreurs:
+//   - L'option --force est obligatoire
+```
+
+---
+
+## Extraction manuelle des éléments
+
+```php
+$parser = new SignatureParser();
+
+// Extraction des éléments de la signature
+$elements = $parser->extractSignatureElements('backup {source} {destination} {--force}');
+// StringTypedCollection ['backup', 'source', 'destination', '--force']
+
+// Extraction des éléments de la requête
+$elements = $parser->extractQueryElements('backup /var/www /backup [cache, logs] --force');
+// StringTypedCollection ['backup', '/var/www', '/backup', '[cache, logs]', '--force']
+```
+
+---
+
+## Les parseurs internes
 
 Le package utilise une **chaîne de responsabilité** (Chain of Responsibility) avec 5 parseurs :
 
-| Parser | Rôle | Priorité |
-|--------|------|----------|
-| `SourceParser` | Extrait le nom de la commande (position 0) | 1 |
-| `RequiredParser` | Extrait les arguments requis (sans `=`, `*`, `--`) | 2 |
-| `DefaultParser` | Extrait les arguments avec valeur par défaut (`=`) | 3 |
-| `VariadicParser` | Extrait les arguments variadiques (`*`) | 4 |
-| `OptionsParser` | Extrait les options (`--`) | 5 |
-
-### Ordre d'exécution strict
-
-```
-1. SourceParser  → Extrait la source
-2. RequiredParser → Extrait les arguments requis
-3. DefaultParser  → Extrait les arguments par défaut
-4. VariadicParser → Extrait les arguments variadiques
-5. OptionsParser  → Extrait les options
-```
-
-Chaque parseur prend ce qui le concerne et **passe le reste** au parseur suivant.
+| Parser | Rôle | Syntaxe | Priorité |
+|--------|------|---------|----------|
+| `SourceParser` | Nom de la commande | `command` | 1 |
+| `RequiredParser` | Arguments requis | `{name}` | 2 |
+| `DefaultParser` | Valeurs par défaut | `{name=value}` | 3 |
+| `VariadicParser` | Arguments variadiques | `{name*}` | 4 |
+| `OptionsParser` | Options | `{--flag}` | 5 |
 
 ---
 
@@ -332,122 +354,276 @@ Chaque parseur prend ce qui le concerne et **passe le reste** au parseur suivant
 <?php
 
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
+use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\SignatureParser;
 
 final class CustomParser implements ParserInterface
 {
-    public function parse(array $signature, array $query): array
+    public function parse(array $signature, array $query): ParsedResultRecord
     {
         // Votre logique personnalisée
-        $custom = 'valeur personnalisée';
-
-        return [
-            'result' => ['custom' => $custom],
+        // Ici on ajoute un champ 'custom' au résultat
+        return ParsedResultRecord::from([
+            'data' => ['custom' => 'valeur_personnalisee'],
             'signature' => $signature,
             'query' => $query,
-        ];
+        ]);
     }
 }
 
 $parser = new SignatureParser();
-$parser->addParser(new CustomParser()); // ← S'ajoute APRÈS les parseurs par défaut
+$parser->addParser(new CustomParser());  // S'ajoute après les parseurs par défaut
 
 $result = $parser->parse($signature, $query);
-// $result contient maintenant 'custom' en plus des autres champs
+echo $result->custom;  // 'valeur_personnalisee'
 ```
 
 ### Supprimer un parseur
 
 ```php
-$parser = new SignatureParser();
-
-// Supprimer le parseur d'options
+// Supprime le parseur d'options
 $parser->removeParser(OptionsParser::class);
 
 // Les options ne seront plus extraites
 $result = $parser->parse($signature, $query);
 ```
 
-### Récupérer la liste des parseurs
+---
+
+## Cas d'usage avancés
+
+### Cas 1 : Interface de ligne de commande simple
 
 ```php
-$parser = new SignatureParser();
-$parsers = $parser->getParsers();
+<?php
 
-foreach ($parsers as $parser) {
-    echo get_class($parser) . "\n";
+use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
+
+class SimpleCli
+{
+    private array $commands = [];
+    
+    public function register(string $name, string $signature, callable $handler): void
+    {
+        $this->commands[$name] = [
+            'signature' => $signature,
+            'handler' => $handler,
+        ];
+    }
+    
+    public function run(string $query): void
+    {
+        $parts = explode(' ', $query);
+        $commandName = $parts[0];
+        
+        if (!isset($this->commands[$commandName])) {
+            echo "Commande inconnue: $commandName\n";
+            return;
+        }
+        
+        $command = $this->commands[$commandName];
+        $vo = new SignatureVO($command['signature'], $query);
+        
+        // Récupère les arguments et options
+        $args = $vo->getRequireds();
+        $options = $vo->getOptions();
+        
+        // Exécute le handler
+        $command['handler']($args, $options);
+    }
 }
+
+// Création de l'application
+$app = new SimpleCli();
+
+// Enregistrement d'une commande
+$app->register('backup', 'backup {source} {destination} {--force}', function($args, $options) {
+    echo "Sauvegarde de {$args['source']} vers {$args['destination']}\n";
+    if ($options['force'] ?? false) {
+        echo "Mode forcé activé\n";
+    }
+});
+
+// Exécution
+$app->run('backup /var/www /backup --force');
+// Sauvegarde de /var/www vers /backup
+// Mode forcé activé
+```
+
+### Cas 2 : Générateur de documentation
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
+
+class DocumentationGenerator
+{
+    private array $commands = [];
+    
+    public function addCommand(string $name, string $signature, string $description): void
+    {
+        $this->commands[$name] = [
+            'signature' => $signature,
+            'description' => $description,
+        ];
+    }
+    
+    public function generate(): string
+    {
+        $content = "# Commandes disponibles\n\n";
+        
+        foreach ($this->commands as $name => $data) {
+            $vo = new SignatureStructureVO($data['signature']);
+            
+            $content .= "## $name\n\n";
+            $content .= $data['description'] . "\n\n";
+            
+            // Construction de l'usage
+            $content .= "Usage: `$name`";
+            
+            if ($vo->hasRequireds()) {
+                foreach ($vo->getRequireds() as $arg) {
+                    $content .= " <$arg>";
+                }
+            }
+            
+            if ($vo->hasDefaults()) {
+                foreach ($vo->getDefaults() as $name => $default) {
+                    $content .= " [<$name>]";
+                }
+            }
+            
+            $content .= "\n\n";
+            
+            // Options
+            if ($vo->hasOptions()) {
+                $content .= "**Options:**\n";
+                foreach ($vo->getOptions() as $opt) {
+                    $content .= "- `--$opt`\n";
+                }
+                $content .= "\n";
+            }
+        }
+        
+        return $content;
+    }
+}
+
+$docs = new DocumentationGenerator();
+$docs->addCommand('backup', 'backup {source} {destination} {format=zip} {--force}', 'Sauvegarde des fichiers');
+$docs->addCommand('deploy', 'deploy {env=production} {--force} {--verbose}', 'Déploiement de l\'application');
+
+echo $docs->generate();
 ```
 
 ---
 
-## Exemples
+## Exemples complets
 
-### Commande Git
+### Exemple 1 : Script de backup
 
 ```php
+<?php
+
+use AndyDefer\SignatureParser\SignatureParser;
+
+// Signature et requête
+$signature = 'backup {source} {destination} {format=zip} {excludes*} {--force}';
+$query = 'backup /var/www /backup tar.gz [cache, logs, tmp] --force';
+
+// Parsing
+$parser = new SignatureParser();
+$result = $parser->parse($signature, $query);
+
+// Affichage structuré
+echo "Source: " . $result->source . "\n";
+echo "Source path: " . $result->required->first()->value . "\n";
+echo "Destination: " . $result->required->last()->value . "\n";
+echo "Format: " . $result->default->first()->value . "\n";
+echo "Excludes: " . implode(', ', $result->variadic->first()->values->toArray()) . "\n";
+echo "Force: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";
+
+// Source: backup
+// Source path: /var/www
+// Destination: /backup
+// Format: tar.gz
+// Excludes: cache, logs, tmp
+// Force: Oui
+```
+
+### Exemple 2 : Commande Git
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\SignatureParser;
+
 $signature = 'git {command} {--all} {--force}';
 $query = 'git add --all';
 
+$parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
 
-// $result['source'] = 'git'
-// $result['required']['command'] = 'add'
-// $result['options']['all'] = true
-// $result['options']['force'] = false
+echo "Source: " . $result->source . "\n";                       // 'git'
+echo "Commande: " . $result->required->first()->value . "\n";   // 'add'
+echo "All: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";   // 'Oui'
+echo "Force: " . ($result->options->last()->value ? 'Oui' : 'Non') . "\n";  // 'Non'
 ```
 
-### Commande Docker
+### Exemple 3 : Commande Docker
 
 ```php
+<?php
+
+use AndyDefer\SignatureParser\SignatureParser;
+
 $signature = 'docker {container} {image} {--detach} {--rm}';
 $query = 'docker run nginx --detach';
 
+$parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
 
-// $result['source'] = 'docker'
-// $result['required']['container'] = 'run'
-// $result['required']['image'] = 'nginx'
-// $result['options']['detach'] = true
-// $result['options']['rm'] = false
+echo "Source: " . $result->source . "\n";                      // 'docker'
+echo "Container: " . $result->required->first()->value . "\n"; // 'run'
+echo "Image: " . $result->required->last()->value . "\n";      // 'nginx'
+echo "Detach: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n"; // 'Oui'
+echo "Remove: " . ($result->options->last()->value ? 'Oui' : 'Non') . "\n";  // 'Non'
 ```
 
-### Commande avec valeurs par défaut
+### Exemple 4 : Utilisation des Value Objects
 
 ```php
-$signature = 'deploy {env=production} {--force}';
-$query = 'deploy staging --force';
+<?php
 
-$result = $parser->parse($signature, $query);
+use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
+use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
 
-// $result['source'] = 'deploy'
-// $result['default']['env'] = 'staging'  // ← override la valeur par défaut
-// $result['options']['force'] = true
-```
+// 1. Analyser la structure (sans requête)
+$structure = new SignatureStructureVO('deploy {env=production} {--force} {--verbose}');
 
-### SignatureStructureVO pour l'analyse de structure
+echo "Commande: " . $structure->getSource() . "\n";  // 'deploy'
+echo "Arguments: " . $structure->countArguments() . "\n";  // 1 (seulement 'env')
 
-```php
-$vo = new SignatureStructureVO('deploy {env=production} {--force}');
+if ($structure->hasDefault('env')) {
+    $defaults = $structure->getDefaults();
+    echo "Environnement par défaut: " . $defaults['env'] . "\n";  // 'production'
+}
 
-echo $vo->getSource();          // 'deploy'
-print_r($vo->getDefaults());    // ['env' => 'production']
-print_r($vo->getOptions());     // ['force']
-```
+// 2. Analyser avec la requête
+$full = new SignatureVO(
+    'deploy {env=production} {--force} {--verbose}',
+    'deploy staging --force'
+);
 
----
+echo "Environnement: " . $full->getDefault('env') . "\n";  // 'staging' (override)
+echo "Force: " . ($full->getOption('force') ? 'Oui' : 'Non') . "\n";  // 'Oui'
+echo "Verbose: " . ($full->getOption('verbose') ? 'Oui' : 'Non') . "\n";  // 'Non'
 
-## Tests
-
-```bash
-# Exécuter tous les tests
-./vendor/bin/phpunit
-
-# Un test spécifique
-./vendor/bin/phpunit --filter test_parses_signature
-
-# Avec couverture de code
-./vendor/bin/phpunit --coverage-html coverage/
+// 3. Vérification des arguments
+if ($full->hasRequired('env')) {
+    echo "L'environnement est fourni: " . $full->getRequired('env') . "\n";
+}
 ```
 
 ---
