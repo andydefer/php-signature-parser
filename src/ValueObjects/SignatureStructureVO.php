@@ -1,7 +1,5 @@
 <?php
 
-// src/ValueObjects/SignatureStructureVO.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\ValueObjects;
@@ -12,18 +10,18 @@ use AndyDefer\SignatureParser\SignatureParser;
 use InvalidArgumentException;
 
 /**
- * Value Object représentant la structure d'une signature CLI.
+ * Value Object representing the structure of a CLI signature.
  *
- * Ce VO analyse UNIQUEMENT la signature (pas la requête) pour fournir
- * des informations sur sa structure : source, arguments requis, arguments
- * par défaut, variadiques et options.
+ * This VO analyzes ONLY the signature (not the query) to provide
+ * information about its structure: source, required arguments, default
+ * arguments, variadics and flags.
  *
  * @example
  * $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excludes*} {--force}');
  * $vo->getRequireds(); // ['source', 'destination']
  * $vo->getDefaults(); // ['format' => 'zip']
  * $vo->getVariadics(); // ['excludes']
- * $vo->getOptions(); // ['force']
+ * $vo->getFlags(); // ['force']
  */
 final class SignatureStructureVO extends AbstractValueObject
 {
@@ -35,7 +33,7 @@ final class SignatureStructureVO extends AbstractValueObject
 
     private array $variadic;
 
-    private array $options;
+    private array $flags;
 
     private string $raw;
 
@@ -59,7 +57,7 @@ final class SignatureStructureVO extends AbstractValueObject
         $this->required = [];
         $this->default = [];
         $this->variadic = [];
-        $this->options = [];
+        $this->flags = [];
 
         foreach ($elements as $index => $element) {
             if ($index === 0) {
@@ -67,12 +65,23 @@ final class SignatureStructureVO extends AbstractValueObject
             }
 
             if (str_starts_with($element, '--')) {
-                $this->options[] = ltrim($element, '--');
+                $this->flags[] = ltrim($element, '--');
             } elseif (str_contains($element, '*')) {
                 $this->variadic[] = str_replace('*', '', $element);
-            } elseif (str_contains($element, '=')) {
-                [$name, $defaultValue] = explode('=', $element, 2);
-                $this->default[$name] = $defaultValue;
+            } elseif (str_contains($element, '=') || str_ends_with($element, '?')) {
+                $name = $element;
+                $defaultValue = null;
+
+                if (str_contains($element, '=')) {
+                    [$name, $defaultValue] = explode('=', $element, 2);
+                    $defaultValue = $defaultValue === '' ? null : $defaultValue;
+                } elseif (str_ends_with($element, '?')) {
+                    $name = rtrim($element, '?');
+                }
+
+                if ($defaultValue !== null) {
+                    $this->default[$name] = $defaultValue;
+                }
             } else {
                 $this->required[] = $element;
             }
@@ -83,7 +92,7 @@ final class SignatureStructureVO extends AbstractValueObject
             'required' => $this->required,
             'default' => $this->default,
             'variadic' => $this->variadic,
-            'options' => $this->options,
+            'flags' => $this->flags,
         ]);
     }
 
@@ -107,9 +116,9 @@ final class SignatureStructureVO extends AbstractValueObject
         return $this->variadic;
     }
 
-    public function getOptions(): array
+    public function getFlags(): array
     {
-        return $this->options;
+        return $this->flags;
     }
 
     public function hasRequired(string $name): bool
@@ -127,9 +136,9 @@ final class SignatureStructureVO extends AbstractValueObject
         return in_array($name, $this->variadic, true);
     }
 
-    public function hasOption(string $name): bool
+    public function hasFlag(string $name): bool
     {
-        return in_array($name, $this->options, true);
+        return in_array($name, $this->flags, true);
     }
 
     public function countArguments(): int
@@ -157,9 +166,9 @@ final class SignatureStructureVO extends AbstractValueObject
         return ! empty($this->variadic);
     }
 
-    public function hasOptions(): bool
+    public function hasFlags(): bool
     {
-        return ! empty($this->options);
+        return ! empty($this->flags);
     }
 
     public function getValue(): StrictDataObject

@@ -7,36 +7,52 @@ namespace AndyDefer\SignatureParser;
 use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 use AndyDefer\DomainStructures\Normalizers\NormalizerChain;
 use AndyDefer\SignatureParser\Collections\ArgumentCollection;
-use AndyDefer\SignatureParser\Collections\OptionCollection;
+use AndyDefer\SignatureParser\Collections\FlagCollection;
 use AndyDefer\SignatureParser\Collections\VariadicArgumentCollection;
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Contracts\ParserRegistryInterface;
 use AndyDefer\SignatureParser\Contracts\SignatureParserInterface;
 use AndyDefer\SignatureParser\Formatters\TextFormatter;
-use AndyDefer\SignatureParser\Parsers\DefaultParser;
-use AndyDefer\SignatureParser\Parsers\OptionsParser;
+use AndyDefer\SignatureParser\Parsers\DefaultAndNullableParser;
+use AndyDefer\SignatureParser\Parsers\FlagParser;
 use AndyDefer\SignatureParser\Parsers\RequiredParser;
 use AndyDefer\SignatureParser\Parsers\SourceParser;
 use AndyDefer\SignatureParser\Parsers\VariadicParser;
 use AndyDefer\SignatureParser\Records\ArgumentRecord;
-use AndyDefer\SignatureParser\Records\OptionRecord;
+use AndyDefer\SignatureParser\Records\FlagRecord;
 use AndyDefer\SignatureParser\Records\ParsedSignatureRecord;
 use AndyDefer\SignatureParser\Records\VariadicArgumentRecord;
 
+/**
+ * Main parser for CLI command signatures and queries.
+ *
+ * Uses a chain of responsibility pattern with specialized parsers to extract:
+ * - Source (command name)
+ * - Required arguments
+ * - Default and nullable arguments
+ * - Variadic arguments
+ * - Boolean flags
+ */
 final class SignatureParser implements ParserRegistryInterface, SignatureParserInterface
 {
     /** @var array<ParserInterface> */
     private array $parsers = [];
 
+    /**
+     * Initializes the parser with the default chain of responsibility.
+     */
     public function __construct()
     {
         $this->addParser(new SourceParser);
         $this->addParser(new RequiredParser);
-        $this->addParser(new DefaultParser);
+        $this->addParser(new DefaultAndNullableParser);
         $this->addParser(new VariadicParser);
-        $this->addParser(new OptionsParser);
+        $this->addParser(new FlagParser);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function addParser(ParserInterface $parser): self
     {
         $this->parsers[] = $parser;
@@ -44,6 +60,9 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         return $this;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function removeParser(string $parserClass): self
     {
         $this->parsers = array_filter(
@@ -54,11 +73,17 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         return $this;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getParsers(): array
     {
         return $this->parsers;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function parse(string $signature, string $query): ParsedSignatureRecord
     {
         $signatureElements = $this->extractSignatureElements($signature);
@@ -82,44 +107,9 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         return $this->buildRecord($result);
     }
 
-    private function buildRecord(array $data): ParsedSignatureRecord
-    {
-        $required = new ArgumentCollection;
-        foreach ($data['required'] ?? [] as $name => $value) {
-            $required->add(new ArgumentRecord($name, $value));
-        }
-
-        $default = new ArgumentCollection;
-        foreach ($data['default'] ?? [] as $name => $value) {
-            $default->add(new ArgumentRecord($name, $value));
-        }
-
-        $variadic = new VariadicArgumentCollection;
-        foreach ($data['variadic'] ?? [] as $name => $values) {
-            $variadic->add(new VariadicArgumentRecord(
-                $name,
-                StringTypedCollection::from($values)
-            ));
-        }
-
-        $options = new OptionCollection;
-        foreach ($data['options'] ?? [] as $name => $value) {
-            $options->add(new OptionRecord($name, $value));
-        }
-
-        $rawData = [
-            'source' => $data['source'] ?? '',
-            'required' => $required,
-            'default' => $default,
-            'variadic' => $variadic,
-            'options' => $options,
-        ];
-
-        $data = TextFormatter::format(NormalizerChain::get()->normalize($rawData));
-
-        return ParsedSignatureRecord::from($data);
-    }
-
+    /**
+     * {@inheritDoc}
+     */
     public function extractSignatureElements(string $signature): StringTypedCollection
     {
         preg_match_all('/\{([^}]+)\}|(\S+)/', $signature, $matches);
@@ -136,6 +126,9 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         return StringTypedCollection::from($result);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function extractQueryElements(string $query): StringTypedCollection
     {
         $parts = explode(' ', $query);
@@ -182,5 +175,49 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         }
 
         return StringTypedCollection::from($result);
+    }
+
+    /**
+     * Builds a ParsedSignatureRecord from the parsed data.
+     *
+     * @param  array<string, mixed>  $data  The parsed data from all parsers
+     * @return ParsedSignatureRecord The structured result
+     */
+    private function buildRecord(array $data): ParsedSignatureRecord
+    {
+        $required = new ArgumentCollection;
+        foreach ($data['required'] ?? [] as $name => $value) {
+            $required->add(new ArgumentRecord($name, $value));
+        }
+
+        $default = new ArgumentCollection;
+        foreach ($data['default'] ?? [] as $name => $value) {
+            $default->add(new ArgumentRecord($name, $value));
+        }
+
+        $variadic = new VariadicArgumentCollection;
+        foreach ($data['variadic'] ?? [] as $name => $values) {
+            $variadic->add(new VariadicArgumentRecord(
+                $name,
+                StringTypedCollection::from($values)
+            ));
+        }
+
+        $flags = new FlagCollection;
+        foreach ($data['flags'] ?? [] as $name => $value) {
+            $flags->add(new FlagRecord($name, $value));
+        }
+
+        $rawData = [
+            'source' => $data['source'] ?? '',
+            'required' => $required,
+            'default' => $default,
+            'variadic' => $variadic,
+            'flags' => $flags,
+        ];
+
+        $normalizedData = TextFormatter::format(NormalizerChain::get()->normalize($rawData));
+
+        return ParsedSignatureRecord::from($normalizedData);
     }
 }

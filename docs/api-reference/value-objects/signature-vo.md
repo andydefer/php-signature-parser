@@ -1,8 +1,9 @@
+```markdown
 # SignatureVO - Référence Technique
 
 ## Description
 
-Value Object qui analyse une commande CLI complète (signature + requête) et fournit un accès typé à toutes ses parties : source, arguments requis, arguments par défaut, variadiques et options.
+Value Object qui analyse une commande CLI complète (signature + requête) et fournit un accès typé à toutes ses parties : source, arguments requis, arguments par défaut, variadiques et flags booléens.
 
 ## Hiérarchie
 
@@ -14,6 +15,17 @@ AbstractValueObject
 ## Rôle principal
 
 `SignatureVO` combine une signature et une requête pour fournir une analyse complète d'une commande CLI. Contrairement à `SignatureStructureVO` qui analyse uniquement la structure, ce VO traite les valeurs réelles de la requête.
+
+### Éléments supportés
+
+| Syntaxe | Description | Exemple |
+|---------|-------------|---------|
+| `{name}` | Argument requis | `{source}` |
+| `{name=value}` | Argument avec valeur par défaut | `{format=zip}` |
+| `{name=}` | Argument avec valeur par défaut vide | `{format=}` |
+| `{name?}` | Argument nullable (peut être null) | `{format?}` |
+| `{name*}` | Argument variadique | `{files*}` |
+| `{--flag}` | Flag booléen | `{--force}` |
 
 ## Installation
 
@@ -114,7 +126,7 @@ $unknown = $vo->getDefault('unknown'); // null
 
 Retourne tous les arguments par défaut.
 
-**Retourne :** `array<string, string>` - Tableau associatif [nom => valeur]
+**Retourne :** `array<string, string|null>` - Tableau associatif [nom => valeur]
 
 **Exemple :**
 ```php
@@ -155,33 +167,33 @@ $variadics = $vo->getVariadics();
 
 ---
 
-### `getOption(string $name): bool`
+### `getFlag(string $name): bool`
 
-Retourne la valeur d'une option.
+Retourne la valeur d'un flag.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom de l'option |
+| `$name` | `string` | Nom du flag |
 
-**Retourne :** `bool` - `true` si l'option est présente, `false` sinon
+**Retourne :** `bool` - `true` si le flag est présent, `false` sinon
 
 **Exemple :**
 ```php
-$force = $vo->getOption('force'); // true
-$verbose = $vo->getOption('verbose'); // false
+$force = $vo->getFlag('force'); // true
+$verbose = $vo->getFlag('verbose'); // false
 ```
 
 ---
 
-### `getOptions(): array`
+### `getFlags(): array`
 
-Retourne toutes les options.
+Retourne tous les flags.
 
 **Retourne :** `array<string, bool>` - Tableau associatif [nom => booléen]
 
 **Exemple :**
 ```php
-$options = $vo->getOptions(); // ['force' => true, 'verbose' => false]
+$flags = $vo->getFlags(); // ['force' => true, 'verbose' => false]
 ```
 
 ---
@@ -198,24 +210,24 @@ $parsed = $vo->getParsed();
 echo $parsed->source;              // 'backup'
 echo $parsed->required['source'];  // '/var/www'
 echo $parsed->default['format'];   // 'tar.gz'
-echo $parsed->options['force'];    // true
+echo $parsed->flags['force'];      // true
 ```
 
 ---
 
-### `hasOption(string $name): bool`
+### `hasFlag(string $name): bool`
 
-Vérifie si une option est présente.
+Vérifie si un flag est présent et actif.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom de l'option |
+| `$name` | `string` | Nom du flag |
 
-**Retourne :** `bool` - `true` si l'option est présente
+**Retourne :** `bool` - `true` si le flag est actif
 
 **Exemple :**
 ```php
-if ($vo->hasOption('force')) {
+if ($vo->hasFlag('force')) {
     echo "Force mode enabled";
 }
 ```
@@ -300,7 +312,7 @@ echo "Source path: " . $vo->getRequired('source') . "\n";
 echo "Destination: " . $vo->getRequired('destination') . "\n";
 echo "Format: " . $vo->getDefault('format') . "\n";
 echo "Excludes: " . implode(', ', $vo->getVariadic('excludes')) . "\n";
-echo "Force: " . ($vo->getOption('force') ? 'Yes' : 'No') . "\n";
+echo "Force: " . ($vo->getFlag('force') ? 'Yes' : 'No') . "\n";
 ```
 
 ### Cas 2 : Validation de commande
@@ -311,16 +323,14 @@ function validateCommand(string $signature, string $query): array
     $vo = new SignatureVO($signature, $query);
     $errors = [];
 
-    // Vérifier les arguments requis
     foreach ($vo->getRequireds() as $name => $value) {
         if (empty($value)) {
             $errors[] = "Missing required argument: $name";
         }
     }
 
-    // Vérifier les options
-    if ($vo->hasOption('force') && !$vo->getOption('force')) {
-        $errors[] = "Force option required for this operation";
+    if ($vo->hasFlag('force') && !$vo->getFlag('force')) {
+        $errors[] = "Force flag required for this operation";
     }
 
     return $errors;
@@ -328,9 +338,9 @@ function validateCommand(string $signature, string $query): array
 
 $errors = validateCommand(
     'deploy {env} {--force}',
-    'deploy --force'
+    'deploy staging'
 );
-// $errors = ['Missing required argument: env']
+// $errors = ['Missing required argument: env', 'Force flag required for this operation']
 ```
 
 ### Cas 3 : Commande Docker
@@ -344,26 +354,21 @@ $vo = new SignatureVO(
 echo "Command: " . $vo->getSource() . "\n";
 echo "Container: " . $vo->getRequired('container') . "\n";
 echo "Image: " . $vo->getRequired('image') . "\n";
-echo "Detach: " . ($vo->getOption('detach') ? 'Yes' : 'No') . "\n";
-echo "Remove: " . ($vo->getOption('rm') ? 'Yes' : 'No') . "\n";
+echo "Detach: " . ($vo->getFlag('detach') ? 'Yes' : 'No') . "\n";
+echo "Remove: " . ($vo->getFlag('rm') ? 'Yes' : 'No') . "\n";
 ```
 
 ### Cas 4 : Comparaison avec SignatureStructureVO
 
 ```php
-// Structure seule
 $structureVo = new SignatureStructureVO('backup {source} {destination} {format=zip} {--force}');
 
-// Avec requête
 $vo = new SignatureVO(
     'backup {source} {destination} {format=zip} {--force}',
     'backup /var/www /backup tar.gz --force'
 );
 
-// La structure VO donne les types attendus
 $expected = $structureVo->getRequireds(); // ['source', 'destination']
-
-// Le VO donne les valeurs réelles
 $actual = $vo->getRequireds(); // ['source' => '/var/www', 'destination' => '/backup']
 ```
 
@@ -381,7 +386,7 @@ Extraction des données
     ├── required → $this->required [name => value]
     ├── default → $this->default [name => value]
     ├── variadic → $this->variadic [name => array]
-    └── options → $this->options [name => bool]
+    └── flags → $this->flags [name => bool]
     ↓
 StrictDataObject construit
     ↓
@@ -402,19 +407,14 @@ Accès via méthodes / getValue()
 ```php
 $parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
-// Le VO utilise le parser pour obtenir la structure
 ```
 
 ### Avec SignatureStructureVO
 
 ```php
-// Analyse de structure sans requête
 $structure = new SignatureStructureVO($signature);
-
-// Analyse complète avec requête
 $full = new SignatureVO($signature, $query);
 
-// Vérification de la présence d'arguments
 if ($structure->hasRequired('source')) {
     $value = $full->getRequired('source');
 }
@@ -431,9 +431,12 @@ if ($structure->hasRequired('source')) {
 | `getDefault()` | O(1) | Accès tableau associatif |
 | `getDefaults()` | O(1) | Accès direct |
 | `getVariadic()` | O(1) | Accès tableau associatif |
-| `getOption()` | O(1) | Accès tableau associatif |
-| `hasOption()` | O(1) | Accès tableau associatif |
+| `getFlag()` | O(1) | Accès tableau associatif |
+| `getFlags()` | O(1) | Accès direct |
+| `hasFlag()` | O(1) | Accès tableau associatif |
 | `hasRequired()` | O(1) | Accès tableau associatif |
+| `hasDefault()` | O(1) | Accès tableau associatif |
+| `hasVariadic()` | O(1) | Accès tableau associatif |
 
 ## Compatibilité
 
@@ -454,57 +457,47 @@ declare(strict_types=1);
 use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
 use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 
-// Commande complexe
 $signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
 $query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models] --force';
 
 $vo = new SignatureVO($signature, $query);
 
-// Source
 echo "Source: " . $vo->getSource() . "\n";
 
-// Arguments requis
 echo "\nArguments requis:\n";
 foreach ($vo->getRequireds() as $name => $value) {
     echo "  $name: $value\n";
 }
 
-// Arguments par défaut
 echo "\nArguments par défaut:\n";
 foreach ($vo->getDefaults() as $name => $value) {
-    echo "  $name: $value\n";
+    echo "  $name: " . ($value ?? 'null') . "\n";
 }
 
-// Arguments variadiques
 echo "\nArguments variadiques:\n";
 foreach ($vo->getVariadics() as $name => $values) {
     echo "  $name: " . implode(', ', $values) . "\n";
 }
 
-// Options
-echo "\nOptions:\n";
-foreach ($vo->getOptions() as $name => $value) {
+echo "\nFlags:\n";
+foreach ($vo->getFlags() as $name => $value) {
     echo "  $name: " . ($value ? 'true' : 'false') . "\n";
 }
 
-// Vérifications
 echo "\nVérifications:\n";
-echo "Has force option? " . ($vo->hasOption('force') ? 'Yes' : 'No') . "\n";
+echo "Has force flag? " . ($vo->hasFlag('force') ? 'Yes' : 'No') . "\n";
 echo "Has source required? " . ($vo->hasRequired('source') ? 'Yes' : 'No') . "\n";
 echo "Has format default? " . ($vo->hasDefault('format') ? 'Yes' : 'No') . "\n";
 echo "Has excludes variadic? " . ($vo->hasVariadic('excludes') ? 'Yes' : 'No') . "\n";
 
-// Accès via StrictDataObject
 $parsed = $vo->getParsed();
 echo "\nStructure complète:\n";
 print_r($parsed->toArray());
 
-// Comparaison avec SignatureStructureVO
 $structure = new SignatureStructureVO($signature);
 echo "\nStructure VO requireds: " . implode(', ', $structure->getRequireds()) . "\n";
 echo "Full VO requireds: " . implode(', ', array_keys($vo->getRequireds())) . "\n";
 
-// Égalité
 $vo2 = new SignatureVO($signature, $query);
 echo "Equal? " . ($vo->equals($vo2) ? 'Yes' : 'No') . "\n";
 ```
@@ -515,3 +508,4 @@ echo "Equal? " . ($vo->equals($vo2) ? 'Yes' : 'No') . "\n";
 - `SignatureParser` - Parseur principal
 - `ParsedSignatureRecord` - Structure de données retournée
 - `StrictDataObject` - DataObject pour l'accès typé
+```

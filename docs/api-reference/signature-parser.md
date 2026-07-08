@@ -1,8 +1,9 @@
+```markdown
 # SignatureParser - Référence Technique
 
 ## Description
 
-Analyseur de signatures et requêtes de commandes CLI. Extrait les arguments requis, les valeurs par défaut, les variadiques et les options d'une commande avec support du formatage des valeurs.
+Analyseur de signatures et requêtes de commandes CLI. Extrait les arguments requis, les valeurs par défaut, les arguments nullables, les variadiques et les flags booléens d'une commande avec support du formatage des valeurs.
 
 ## Hiérarchie / Implémentations
 
@@ -19,9 +20,20 @@ SignatureParserInterface
 
 1. **SourceParser** - Nom de la commande
 2. **RequiredParser** - Arguments requis `{name}`
-3. **DefaultParser** - Arguments avec valeur par défaut `{name=value}`
+3. **DefaultAndNullableParser** - Arguments par défaut `{name=value}` et arguments nullables `{name?}`
 4. **VariadicParser** - Arguments variadiques `{name*}`
-5. **OptionsParser** - Options `{--flag}`
+5. **FlagParser** - Flags booléens `{--flag}`
+
+### Syntaxes supportées
+
+| Syntaxe | Description | Exemple |
+|---------|-------------|---------|
+| `{name}` | Argument requis | `{source}` |
+| `{name=value}` | Valeur par défaut | `{format=zip}` |
+| `{name=}` | Valeur par défaut vide (null) | `{format=}` |
+| `{name?}` | Argument nullable | `{format?}` |
+| `{name*}` | Argument variadique | `{files*}` |
+| `{--flag}` | Flag booléen | `{--force}` |
 
 ### Formatage automatique des valeurs
 
@@ -46,8 +58,8 @@ composer require andydefer/php-signature-parser
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$signature` | `string` | Définition de la commande (ex: `backup {source} {destination} {--force}`) |
-| `$query` | `string` | Commande exécutée (ex: `backup /var/www /backup --force`) |
+| `$signature` | `string` | Définition de la commande |
+| `$query` | `string` | Commande exécutée |
 
 **Retourne :** `ParsedSignatureRecord` - Structure typée contenant toutes les données extraites
 
@@ -64,7 +76,7 @@ $result = $parser->parse(
 echo $result->source;                      // 'backup'
 echo $result->required->first()->value;    // '/var/www'
 echo $result->default->first()->value;     // 'tar.gz'
-echo $result->options->first()->value;     // true
+echo $result->flags->first()->value;       // true
 ```
 
 ---
@@ -127,7 +139,7 @@ $parser->addParser(new CustomParser());
 
 **Exemple :**
 ```php
-$parser->removeParser(OptionsParser::class);
+$parser->removeParser(FlagParser::class);
 ```
 
 ---
@@ -213,7 +225,7 @@ $result = $parser->parse($signature, $query);
 $source = $result->required->first()->value;      // '/home/user/My Project'
 $format = $result->default->first()->value;       // 'tar gz'
 $excludes = $result->variadic->first()->values;   // ['cache folder', 'logs folder']
-$force = $result->options->first()->value;        // true
+$force = $result->flags->first()->value;          // true
 ```
 
 ### Cas 2 : Commande Docker
@@ -226,8 +238,8 @@ $result = $parser->parse($signature, $query);
 
 $container = $result->required->first()->value;      // 'run'
 $image = $result->required->last()->value;           // 'nginx'
-$detach = $result->options->first()->value;          // true
-$rm = $result->options->last()->value;               // false
+$detach = $result->flags->first()->value;            // true
+$rm = $result->flags->last()->value;                 // false
 ```
 
 ### Cas 3 : Valeurs par défaut avec espaces
@@ -239,10 +251,22 @@ $query = 'deploy staging^server';
 $result = $parser->parse($signature, $query);
 
 $env = $result->default->first()->value;             // 'staging server' (override)
-$force = $result->options->first()->value;           // false
+$force = $result->flags->first()->value;             // false
 ```
 
-### Cas 4 : Ajout d'un parseur personnalisé
+### Cas 4 : Arguments nullables
+
+```php
+$signature = 'deploy {env?} {--force}';
+$query = 'deploy --force';
+
+$result = $parser->parse($signature, $query);
+
+$env = $result->default->first()->value;             // null (non fourni)
+$force = $result->flags->first()->value;             // true
+```
+
+### Cas 5 : Ajout d'un parseur personnalisé
 
 ```php
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
@@ -252,7 +276,6 @@ final class CustomParser implements ParserInterface
 {
     public function parse(array $signature, array $query): ParsedResultRecord
     {
-        // Logique personnalisée
         return ParsedResultRecord::from([
             'data' => ['custom' => 'value'],
             'signature' => $signature,
@@ -265,7 +288,7 @@ $parser = new SignatureParser();
 $parser->addParser(new CustomParser());
 
 $result = $parser->parse($signature, $query);
-// $result contient 'custom' en plus des champs standards
+// $result->custom = 'value'
 ```
 
 ---
@@ -283,11 +306,11 @@ SourceParser → extrait 'source'
     ↓
 RequiredParser → extrait 'required'
     ↓
-DefaultParser → extrait 'default'
+DefaultAndNullableParser → extrait 'default' (inclut les nullables)
     ↓
 VariadicParser → extrait 'variadic'
     ↓
-OptionsParser → extrait 'options'
+FlagParser → extrait 'flags'
     ↓
 buildRecord() → construit les collections
     ↓
@@ -304,9 +327,9 @@ ParsedSignatureRecord::from() → retourne le record typé
 |-------|--------|--------------|---------|
 | 1 | SourceParser | Nom de la commande | `command` |
 | 2 | RequiredParser | Arguments requis | `{name}` |
-| 3 | DefaultParser | Arguments par défaut | `{name=value}` |
+| 3 | DefaultAndNullableParser | Valeurs par défaut et nullables | `{name=value}`, `{name?}` |
 | 4 | VariadicParser | Arguments variadiques | `{name*}` |
-| 5 | OptionsParser | Options | `{--flag}` |
+| 5 | FlagParser | Flags booléens | `{--flag}` |
 
 ## Gestion des erreurs
 
@@ -317,8 +340,9 @@ Aucune exception n'est levée par le parser principal. Les valeurs manquantes so
 | Source manquante | `''` (chaîne vide) |
 | Argument requis manquant | `''` (chaîne vide) |
 | Valeur par défaut manquante | La valeur par défaut définie dans la signature |
+| Valeur nullable non fournie | `null` |
 | Variadique manquant | `[]` (tableau vide) |
-| Option manquante | `false` |
+| Flag manquant | `false` |
 
 ## Intégration
 
@@ -334,7 +358,7 @@ $vo = new SignatureVO(
 
 $source = $vo->getSource();              // 'backup'
 $destination = $vo->getRequired('destination'); // '/backup'
-$force = $vo->getOption('force');        // true
+$force = $vo->getFlag('force');          // true
 ```
 
 ### Avec un framework Symfony Console
@@ -402,38 +426,28 @@ $query = 'backup /home/user/My^Project /backup tar^gz [cache^folder, logs^folder
 
 $result = $parser->parse($signature, $query);
 
-// Accès structuré
-echo "Source: " . $result->source . "\n"; // 'backup'
+echo "Source: " . $result->source . "\n";
 
 echo "Arguments requis:\n";
 foreach ($result->required as $arg) {
     echo "  {$arg->name}: {$arg->value}\n";
 }
-// source: /home/user/My Project
-// destination: /backup
 
 echo "Valeurs par défaut:\n";
 foreach ($result->default as $arg) {
     echo "  {$arg->name}: {$arg->value}\n";
 }
-// format: tar gz
-// output: dist
 
 echo "Arguments variadiques:\n";
 foreach ($result->variadic as $arg) {
     echo "  {$arg->name}: " . implode(', ', $arg->values->toArray()) . "\n";
 }
-// excludes: cache folder, logs folder
-// purpose: home data, models
 
-echo "Options:\n";
-foreach ($result->options as $opt) {
-    echo "  {$opt->name}: " . ($opt->value ? 'true' : 'false') . "\n";
+echo "Flags:\n";
+foreach ($result->flags as $flag) {
+    echo "  {$flag->name}: " . ($flag->value ? 'true' : 'false') . "\n";
 }
-// force: true
-// verbose: false
 
-// Extraction des éléments bruts
 $signatureElements = $parser->extractSignatureElements($signature);
 $queryElements = $parser->extractQueryElements($query);
 
@@ -446,6 +460,9 @@ echo "Éléments query: " . implode(', ', $queryElements->toArray()) . "\n";
 - `ParsedSignatureRecord` - Structure de données retournée
 - `ParserInterface` - Contrat pour les parseurs personnalisés
 - `SignatureVO` - Value Object pour l'accès simplifié
+- `SignatureStructureVO` - Value Object pour l'analyse de structure
 - `StringTypedCollection` - Collection typée pour les chaînes
 - `TextFormatter` - Formateur pour le remplacement des caractères
 - `ArgumentCollection` - Collection d'arguments
+- `FlagCollection` - Collection de flags
+```

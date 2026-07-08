@@ -5,22 +5,22 @@ declare(strict_types=1);
 namespace AndyDefer\SignatureParser\Collections;
 
 use AndyDefer\DomainStructures\Collections\Core\TypedCollection;
-use AndyDefer\SignatureParser\Records\OptionRecord;
+use AndyDefer\SignatureParser\Records\FlagRecord;
 
 /**
- * Collection of OptionRecord.
+ * Collection of FlagRecord.
  *
- * @extends TypedCollection<OptionRecord>
+ * @extends TypedCollection<FlagRecord>
  */
-final class OptionCollection extends TypedCollection
+final class FlagCollection extends TypedCollection
 {
     public function __construct()
     {
-        parent::__construct(OptionRecord::class);
+        parent::__construct(FlagRecord::class);
     }
 
     /**
-     * Récupère la valeur d'une option par son nom.
+     * Récupère la valeur d'un flag par son nom.
      */
     public function get(string $name): bool
     {
@@ -34,7 +34,7 @@ final class OptionCollection extends TypedCollection
     }
 
     /**
-     * Vérifie si une option existe par son nom.
+     * Vérifie si un flag existe par son nom.
      */
     public function has(string $name): bool
     {
@@ -48,7 +48,7 @@ final class OptionCollection extends TypedCollection
     }
 
     /**
-     * Vérifie si une option est active (valeur = true).
+     * Vérifie si un flag est actif (valeur = true).
      */
     public function isActive(string $name): bool
     {
@@ -56,7 +56,7 @@ final class OptionCollection extends TypedCollection
     }
 
     /**
-     * Récupère tous les noms des options.
+     * Récupère tous les noms des flags.
      *
      * @return array<string>
      */
@@ -71,7 +71,7 @@ final class OptionCollection extends TypedCollection
     }
 
     /**
-     * Récupère toutes les options actives (valeur = true).
+     * Récupère tous les flags actifs (valeur = true).
      *
      * @return array<string>
      */

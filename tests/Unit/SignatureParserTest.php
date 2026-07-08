@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\Tests\Unit;
 
+use AndyDefer\DomainStructures\Normalizers\NormalizerChain;
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\SignatureParser;
@@ -26,8 +27,8 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('dist', $result->default->last()->value);
         $this->assertSame(['cache', 'logs', 'tmp'], $result->variadic->first()->values->toArray());
         $this->assertSame(['home', 'data', 'models'], $result->variadic->last()->values->toArray());
-        $this->assertTrue($result->options->first()->value);
-        $this->assertFalse($result->options->last()->value);
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertFalse($result->flags->last()->value);
     }
 
     public function test_replaces_caret_with_space_in_required_arguments(): void
@@ -78,7 +79,7 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('/backup', $result->required->last()->value);
         $this->assertSame('tar gz', $result->default->first()->value);
         $this->assertSame(['cache folder', 'logs folder'], $result->variadic->first()->values->toArray());
-        $this->assertTrue($result->options->first()->value);
+        $this->assertTrue($result->flags->first()->value);
     }
 
     public function test_keeps_text_without_caret_unchanged(): void
@@ -137,7 +138,7 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('/backup', $result->required->last()->value);
         $this->assertCount(0, $result->default);
         $this->assertCount(0, $result->variadic);
-        $this->assertCount(0, $result->options);
+        $this->assertCount(0, $result->flags);
     }
 
     public function test_parses_with_only_default_values(): void
@@ -148,12 +149,13 @@ final class SignatureParserTest extends TestCase
         $parser = new SignatureParser;
         $result = $parser->parse($signature, $query);
 
+        // dump(NormalizerChain::get()->normalize($result));
         $this->assertSame('backup', $result->source);
         $this->assertSame('tar.gz', $result->default->first()->value);
         $this->assertSame('dist', $result->default->last()->value);
     }
 
-    public function test_parses_with_only_options(): void
+    public function test_parses_with_only_flags(): void
     {
         $signature = 'backup {--force} {--verbose}';
         $query = 'backup --force';
@@ -162,8 +164,8 @@ final class SignatureParserTest extends TestCase
         $result = $parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertTrue($result->options->first()->value);
-        $this->assertFalse($result->options->last()->value);
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertFalse($result->flags->last()->value);
     }
 
     public function test_parses_with_variadic_only(): void
@@ -190,7 +192,7 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('', $result->required->first()->value);
         $this->assertSame('', $result->required->last()->value);
         $this->assertSame('zip', $result->default->first()->value);
-        $this->assertFalse($result->options->first()->value);
+        $this->assertFalse($result->flags->first()->value);
     }
 
     public function test_removes_and_adds_parsers(): void
@@ -198,7 +200,7 @@ final class SignatureParserTest extends TestCase
         $parser = new SignatureParser;
         $initialCount = count($parser->getParsers());
 
-        $parser->removeParser('AndyDefer\SignatureParser\Parsers\OptionsParser');
+        $parser->removeParser('AndyDefer\SignatureParser\Parsers\FlagParser');
         $this->assertCount($initialCount - 1, $parser->getParsers());
 
         $parser->addParser(new class implements ParserInterface

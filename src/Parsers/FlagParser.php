@@ -7,13 +7,21 @@ namespace AndyDefer\SignatureParser\Parsers;
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 
-final class OptionsParser implements ParserInterface
+/**
+ * Parses boolean flags from a command signature.
+ *
+ * Flags are defined with `--` prefix and are boolean values.
+ */
+final class FlagParser implements ParserInterface
 {
+    /**
+     * {@inheritDoc}
+     */
     public function parse(array $signature, array $query): ParsedResultRecord
     {
-        $options = [];
-        $newSignature = [];
-        $newQuery = [];
+        $flags = [];
+        $remainingSignature = [];
+        $remainingQuery = [];
         $queryIndex = 0;
         $queryCount = count($query);
 
@@ -30,26 +38,25 @@ final class OptionsParser implements ParserInterface
                     }
                 }
 
-                $options[$name] = $found;
+                $flags[$name] = $found;
             } else {
-                $newSignature[] = $element;
+                $remainingSignature[] = $element;
                 if ($queryIndex < $queryCount) {
-                    $newQuery[] = $query[$queryIndex];
+                    $remainingQuery[] = $query[$queryIndex];
                     $queryIndex++;
                 }
             }
         }
 
-        if ($queryIndex < $queryCount) {
-            for ($i = $queryIndex; $i < $queryCount; $i++) {
-                $newQuery[] = $query[$i];
-            }
+        while ($queryIndex < $queryCount) {
+            $remainingQuery[] = $query[$queryIndex];
+            $queryIndex++;
         }
 
         return ParsedResultRecord::from([
-            'data' => ['options' => $options],
-            'signature' => $newSignature,
-            'query' => $newQuery,
+            'data' => ['flags' => $flags],
+            'signature' => $remainingSignature,
+            'query' => $remainingQuery,
         ]);
     }
 }

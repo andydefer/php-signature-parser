@@ -16,11 +16,6 @@ use AndyDefer\DomainStructures\Utils\Associative;
  */
 final class ParsedResultRecord extends AbstractRecord
 {
-    /**
-     * @param  Associative  $data  The extracted data from this parser (associative array with camelCase keys)
-     * @param  StringTypedCollection  $signature  The remaining signature elements
-     * @param  StringTypedCollection  $query  The remaining query elements
-     */
     public function __construct(
         public readonly Associative $data,
         public readonly StringTypedCollection $signature,

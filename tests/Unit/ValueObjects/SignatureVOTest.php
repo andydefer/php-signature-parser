@@ -1,7 +1,5 @@
 <?php
 
-// tests/Unit/ValueObjects/SignatureVOTest.php
-
 declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\Tests\Unit\ValueObjects;
@@ -128,19 +126,19 @@ final class SignatureVOTest extends TestCase
         );
     }
 
-    public function test_get_option(): void
+    public function test_get_flag(): void
     {
         $vo = new SignatureVO(
             'docker {container} {--detach} {--rm}',
             'docker run --detach'
         );
 
-        $this->assertTrue($vo->getOption('detach'));
-        $this->assertFalse($vo->getOption('rm'));
-        $this->assertFalse($vo->getOption('nonexistent'));
+        $this->assertTrue($vo->getFlag('detach'));
+        $this->assertFalse($vo->getFlag('rm'));
+        $this->assertFalse($vo->getFlag('nonexistent'));
     }
 
-    public function test_get_options(): void
+    public function test_get_flags(): void
     {
         $vo = new SignatureVO(
             'docker {container} {--detach} {--rm}',
@@ -149,19 +147,19 @@ final class SignatureVOTest extends TestCase
 
         $this->assertEquals(
             ['detach' => true, 'rm' => false],
-            $vo->getOptions()
+            $vo->getFlags()
         );
     }
 
-    public function test_has_option(): void
+    public function test_has_flag(): void
     {
         $vo = new SignatureVO(
             'docker {container} {--detach}',
             'docker run --detach'
         );
 
-        $this->assertTrue($vo->hasOption('detach'));
-        $this->assertFalse($vo->hasOption('rm'));
+        $this->assertTrue($vo->hasFlag('detach'));
+        $this->assertFalse($vo->hasFlag('rm'));
     }
 
     public function test_has_required(): void
@@ -209,7 +207,7 @@ final class SignatureVOTest extends TestCase
         $this->assertInstanceOf(StrictDataObject::class, $parsed);
         $this->assertEquals('docker', $parsed->source);
         $this->assertEquals(['container' => 'run'], $parsed->required->toArray());
-        $this->assertEquals(['detach' => true], $parsed->options->toArray());
+        $this->assertEquals(['detach' => true], $parsed->flags->toArray());
     }
 
     public function test_get_value(): void
@@ -224,7 +222,7 @@ final class SignatureVOTest extends TestCase
         $this->assertInstanceOf(StrictDataObject::class, $value);
         $this->assertEquals('docker', $value->source);
         $this->assertEquals(['container' => 'run'], $value->required->toArray());
-        $this->assertEquals(['detach' => true], $value->options->toArray());
+        $this->assertEquals(['detach' => true], $value->flags->toArray());
     }
 
     public function test_equals(): void
@@ -278,8 +276,8 @@ final class SignatureVOTest extends TestCase
         $this->assertSame('dist', $vo->getDefault('output'));
         $this->assertEquals(['cache', 'logs', 'tmp'], $vo->getVariadic('excludes'));
         $this->assertEquals(['home', 'data', 'models'], $vo->getVariadic('purpose'));
-        $this->assertTrue($vo->getOption('force'));
-        $this->assertFalse($vo->getOption('verbose'));
+        $this->assertTrue($vo->getFlag('force'));
+        $this->assertFalse($vo->getFlag('verbose'));
     }
 
     public function test_docker_command(): void
@@ -291,8 +289,8 @@ final class SignatureVOTest extends TestCase
 
         $this->assertSame('docker', $vo->getSource());
         $this->assertSame('run', $vo->getRequired('container'));
-        $this->assertTrue($vo->getOption('detach'));
-        $this->assertTrue($vo->getOption('rm'));
+        $this->assertTrue($vo->getFlag('detach'));
+        $this->assertTrue($vo->getFlag('rm'));
     }
 
     public function test_git_command(): void
@@ -304,8 +302,8 @@ final class SignatureVOTest extends TestCase
 
         $this->assertSame('git', $vo->getSource());
         $this->assertSame('add', $vo->getRequired('command'));
-        $this->assertTrue($vo->getOption('all'));
-        $this->assertFalse($vo->getOption('force'));
+        $this->assertTrue($vo->getFlag('all'));
+        $this->assertFalse($vo->getFlag('force'));
     }
 
     public function test_command_with_default_value_only(): void
