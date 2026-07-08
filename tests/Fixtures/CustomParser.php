@@ -28,4 +28,9 @@ final class CustomParser implements ParserInterface
             suggestions: new StringTypedCollection
         );
     }
+
+    public function getTokenPattern(): string
+    {
+        return '/^custom_[a-zA-Z_][a-zA-Z0-9_]*$/';
+    }
 }

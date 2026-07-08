@@ -413,4 +413,175 @@ final class SignatureParserTest extends TestCase
         $this->assertSame(['file1', 'file2'], $result->variadic->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
+
+    // ==================== SIGNATURE VALIDATION TESTS ====================
+
+    public function test_signature_validation_passes_for_valid_signature(): void
+    {
+        $signature = 'backup {source} {destination} {format=zip} {excludes*} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertCount(0, $result->errors);
+        $this->assertCount(0, $result->suggestions);
+    }
+
+    public function test_signature_validation_passes_with_nullable_arguments(): void
+    {
+        $signature = 'deploy {env=?} {port=?} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertCount(0, $result->errors);
+    }
+
+    public function test_signature_validation_fails_for_empty_signature(): void
+    {
+        $result = $this->parser->validateSignature('');
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('empty', $result->errors->first());
+    }
+
+    public function test_signature_validation_fails_for_duplicate_argument_names(): void
+    {
+        $signature = 'backup {source} {source} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('duplicate', strtolower($result->errors->first()));
+    }
+
+    public function test_is_signature_valid_returns_boolean(): void
+    {
+        $validSignature = 'backup {source} {destination} {--force}';
+        $invalidSignature = 'backup {source} {invalid!} {--force}';
+
+        $this->assertTrue($this->parser->isSignatureValid($validSignature));
+        $this->assertFalse($this->parser->isSignatureValid($invalidSignature));
+    }
+
+    public function test_signature_validation_detects_unknown_token_type(): void
+    {
+        $signature = 'backup {source} {??} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('??', $result->errors->first());
+    }
+
+    public function test_signature_validation_handles_complex_signature(): void
+    {
+        $signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertCount(0, $result->errors);
+        $this->assertCount(0, $result->suggestions);
+    }
+
+    public function test_signature_validation_fails_for_source_with_invalid_characters(): void
+    {
+        $signature = 'backup! {source} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('source name', $result->errors->first());
+    }
+
+    public function test_signature_validation_passes_for_source_with_hyphens(): void
+    {
+        $signature = 'my-backup {source} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertCount(0, $result->errors);
+    }
+
+    public function test_signature_validation_fails_for_variadic_without_name(): void
+    {
+        $signature = 'backup {*} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+    }
+
+    public function test_signature_validation_fails_for_default_without_name(): void
+    {
+        $signature = 'backup {=zip} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+    }
+
+    public function test_signature_validation_fails_for_flag_without_name(): void
+    {
+        $signature = 'backup {--} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+    }
+
+    public function test_signature_validation_provides_suggestions_for_invalid_tokens(): void
+    {
+        $signature = 'backup {source} {??} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->suggestions);
+        $this->assertStringContainsString('Check the syntax', $result->suggestions->first());
+    }
+
+    public function test_signature_validation_fails_for_invalid_order(): void
+    {
+        $signature = 'backup {format=zip} {source} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('Required argument', $result->errors->first());
+    }
+
+    public function test_signature_validation_fails_for_invalid_token_syntax(): void
+    {
+        $signature = 'backup {source} {format=zip} {invalid!} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        // Il peut y avoir plusieurs erreurs (ordre + token invalide)
+        $this->assertGreaterThanOrEqual(1, $result->errors->count());
+        $this->assertStringContainsString('invalid!', $result->errors->first());
+    }
+
+    public function test_signature_validation_fails_for_duplicate_names_across_types(): void
+    {
+        $signature = 'backup {source} {source=zip} {source*} {--force}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        // Multiple duplicates detected
+        $this->assertGreaterThanOrEqual(1, $result->errors->count());
+        $this->assertStringContainsString('duplicate', strtolower($result->errors->first()));
+    }
 }

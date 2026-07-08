@@ -101,4 +101,9 @@ final class FlagParser implements ParserInterface
             suggestions: $suggestions
         );
     }
+
+    public function getTokenPattern(): string
+    {
+        return '/^--[a-zA-Z_][a-zA-Z0-9_]*$/';
+    }
 }

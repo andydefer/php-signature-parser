@@ -2,7 +2,7 @@
 
 ## Description
 
-Analyseur de signatures et requêtes de commandes CLI. Extrait les arguments requis, les valeurs par défaut, les arguments nullables, les variadiques et les flags booléens d'une commande avec support du formatage des valeurs et validation intégrée.
+Analyseur de signatures et requêtes de commandes CLI. Extrait la source, les arguments requis, les arguments par défaut, les variadiques et les flags d'une commande. Valide également la structure des signatures.
 
 ## Hiérarchie / Implémentations
 
@@ -15,43 +15,23 @@ SignatureParserInterface
 
 ## Rôle principal
 
-`SignatureParser` est le point d'entrée central pour l'analyse des commandes CLI. Il utilise une **chaîne de responsabilité** (Chain of Responsibility) avec 6 parseurs spécialisés pour extraire chaque type d'élément :
+`SignatureParser` est le point d'entrée central pour l'analyse des commandes CLI. Il utilise une **chaîne de responsabilité** (Chain of Responsibility) avec 5 parseurs spécialisés :
 
 1. **SourceParser** - Nom de la commande
 2. **RequiredParser** - Arguments requis `{name}`
-3. **NullableParser** - Arguments nullables `{name?}`
-4. **DefaultParser** - Arguments avec valeur par défaut `{name=value}`
-5. **VariadicParser** - Arguments variadiques `{name*}`
-6. **FlagParser** - Flags booléens `{--flag}`
-
-Le parser intègre également un **système de validation** qui vérifie la conformité d'une requête par rapport à sa signature.
-
-### Syntaxes supportées
-
-| Syntaxe | Description | Exemple |
-|---------|-------------|---------|
-| `{name}` | Argument requis | `{source}` |
-| `{name=value}` | Valeur par défaut | `{format=zip}` |
-| `{name=}` | Valeur par défaut vide (ignoré) | `{format=}` |
-| `{name?}` | Argument nullable | `{format?}` |
-| `{name*}` | Argument variadique | `{files*}` |
-| `{--flag}` | Flag booléen | `{--force}` |
-
-### Formatage automatique des valeurs
-
-Le parser intègre un **formateur automatique** qui remplace les caractères `^` par des espaces dans toutes les valeurs extraites.
-
-```bash
-# Au lieu de : "John Doe"
-# On fait : John^Doe
-# Résultat : "John Doe"
-```
+3. **DefaultParser** - Arguments par défaut `{name=value}` et nullables `{name=?}`
+4. **VariadicParser** - Arguments variadiques `{name*}`
+5. **FlagParser** - Flags `{--flag}`
 
 ## Installation
 
 ```bash
 composer require andydefer/php-signature-parser
 ```
+
+### Prérequis
+
+- PHP 8.1 ou supérieur
 
 ## API / Méthodes publiques
 
@@ -64,7 +44,7 @@ composer require andydefer/php-signature-parser
 
 **Retourne :** `ParsedSignatureRecord` - Structure typée contenant toutes les données extraites
 
-**Exceptions :** Aucune (les parseurs sont tolérants)
+**Exceptions :** `InvalidArgumentException` - Si l'ordre des arguments est invalide
 
 **Exemple :**
 ```php
@@ -74,10 +54,10 @@ $result = $parser->parse(
     'backup /var/www /backup tar.gz --force'
 );
 
-echo $result->source;                      // 'backup'
-echo $result->required->first()->value;    // '/var/www'
-echo $result->default->first()->value;     // 'tar.gz'
-echo $result->flags->first()->value;       // true
+echo $result->source;                   // 'backup'
+echo $result->required->first()->value; // '/var/www'
+echo $result->default->first()->value;  // 'tar.gz'
+echo $result->flags->first()->value;    // true
 ```
 
 ---
@@ -91,20 +71,45 @@ Valide une requête contre une signature.
 | `$signature` | `string` | Définition de la commande |
 | `$query` | `string` | Commande exécutée |
 
-**Retourne :** `ValidationResultRecord` - Résultat de la validation avec erreurs et suggestions
+**Retourne :** `ValidationResultRecord` - Résultat de validation avec erreurs et suggestions
 
 **Exemple :**
 ```php
 $result = $parser->validate(
-    'backup {source} {destination} {--force}',
-    'backup /var/www --force'
+    'backup {source} {destination}',
+    'backup /var/www'
 );
 
 if (!$result->isValid) {
     foreach ($result->errors as $error) {
-        echo $error . "\n";
+        echo $error;
     }
-    // Missing required argument: 'destination'
+}
+```
+
+---
+
+### `validateSignature(string $signature): ValidationResultRecord`
+
+Valide la structure d'une signature (sans requête).
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$signature` | `string` | Signature à valider |
+
+**Retourne :** `ValidationResultRecord` - Résultat de validation avec erreurs et suggestions
+
+**Vérifications effectuées :**
+- Ordre des arguments (requis → défaut → variadique → flags)
+- Syntaxe des tokens
+- Absence de doublons
+- Source valide
+
+**Exemple :**
+```php
+$result = $parser->validateSignature('backup {source} {format=zip} {--force}');
+if ($result->isValid) {
+    echo 'Signature valide';
 }
 ```
 
@@ -112,75 +117,33 @@ if (!$result->isValid) {
 
 ### `isValid(string $signature, string $query): bool`
 
-Vérifie rapidement si une requête est valide.
-
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `$signature` | `string` | Définition de la commande |
 | `$query` | `string` | Commande exécutée |
 
-**Retourne :** `bool` - `true` si la requête est valide
+**Retourne :** `bool` - `true` si la commande est valide
 
-**Exemple :**
-```php
-if ($parser->isValid('backup {source} {--force}', 'backup /var/www --force')) {
-    echo "Commande valide";
-}
-```
+---
+
+### `isSignatureValid(string $signature): bool`
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$signature` | `string` | Signature à valider |
+
+**Retourne :** `bool` - `true` si la signature est valide
 
 ---
 
 ### `getValidationErrors(string $signature, string $query): StringTypedCollection`
 
-Retourne uniquement les erreurs de validation.
-
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `$signature` | `string` | Définition de la commande |
 | `$query` | `string` | Commande exécutée |
 
-**Retourne :** `StringTypedCollection` - Collection des messages d'erreur
-
-**Exemple :**
-```php
-$errors = $parser->getValidationErrors(
-    'backup {source} {destination} {--force}',
-    'backup /var/www --force'
-);
-// StringTypedCollection ['Missing required argument: destination']
-```
-
----
-
-### `extractSignatureElements(string $signature): StringTypedCollection`
-
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `$signature` | `string` | Signature de la commande |
-
-**Retourne :** `StringTypedCollection` - Liste des éléments bruts de la signature
-
-**Exemple :**
-```php
-$elements = $parser->extractSignatureElements('backup {source} {destination} {--force}');
-// ['backup', 'source', 'destination', '--force']
-```
-
----
-
-### `extractQueryElements(string $query): StringTypedCollection`
-
-| Paramètre | Type | Description |
-|-----------|------|-------------|
-| `$query` | `string` | Requête de la commande |
-
-**Retourne :** `StringTypedCollection` - Liste des éléments bruts de la requête
-
-**Exemple :**
-```php
-$elements = $parser->extractQueryElements('backup /var/www /backup [cache, logs] --force');
-// ['backup', '/var/www', '/backup', '[cache, logs]', '--force']
-```
+**Retourne :** `StringTypedCollection` - Collection des erreurs de validation
 
 ---
 
@@ -210,31 +173,144 @@ $elements = $parser->extractQueryElements('backup /var/www /backup [cache, logs]
 
 ---
 
-## Ordre des parseurs
+### `extractSignatureElements(string $signature): StringTypedCollection`
 
-| Ordre | Parser | Type extrait | Syntaxe |
-|-------|--------|--------------|---------|
-| 1 | SourceParser | Nom de la commande | `command` |
-| 2 | RequiredParser | Arguments requis | `{name}` |
-| 3 | NullableParser | Arguments nullables | `{name?}` |
-| 4 | DefaultParser | Valeurs par défaut | `{name=value}` |
-| 5 | VariadicParser | Arguments variadiques | `{name*}` |
-| 6 | FlagParser | Flags booléens | `{--flag}` |
+Extrait les éléments bruts d'une signature.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$signature` | `string` | Signature de la commande |
+
+**Retourne :** `StringTypedCollection` - Liste des éléments bruts
+
+---
+
+### `extractQueryElements(string $query): StringTypedCollection`
+
+Extrait les éléments bruts d'une requête.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$query` | `string` | Requête de la commande |
+
+**Retourne :** `StringTypedCollection` - Liste des éléments bruts
+
+---
+
+## Ordre strict des arguments
+
+⚠️ **L'ordre des éléments est STRICT et IMPÉRATIF.**
+
+| Ordre | Type | Syntaxe | Exemple |
+|-------|------|---------|---------|
+| **1** | **Source** | `command` | `backup` |
+| **2** | **Requis** | `{name}` | `{source}` `{destination}` |
+| **3** | **Par défaut** | `{name=value}` | `{format=zip}` `{output=dist}` |
+| **4** | **Nullable** | `{name=?}` | `{env=?}` `{port=?}` |
+| **5** | **Variadique** | `{name*}` | `{excludes*}` `{purpose*}` |
+| **6** | **Flags** | `{--flag}` | `{--force}` `{--verbose}` |
+
+### Règles strictes
+
+| Règle | Description |
+|-------|-------------|
+| **Source** | Toujours en première position |
+| **Requis** | Viennent en premier, avant tous les autres |
+| **Par défaut** | Viennent après les requis, avant les nullables et variadiques |
+| **Nullable** | `{name=?}` - Viennent après les par défaut, avant les variadiques |
+| **Variadiques** | Toujours en dernière position des arguments |
+| **Flags** | Peuvent être à n'importe quelle position après la source |
+
+---
+
+## Le token `~` (skip)
+
+Le token `~` permet de sauter un argument :
+
+| Cas | Comportement |
+|-----|--------------|
+| **Argument requis** | `~` → `null` |
+| **Argument par défaut** | `~` → utilise la valeur par défaut |
+| **Argument nullable** | `~` → `null` |
+
+---
+
+## Formatage des valeurs
+
+Le `TextFormatter` applique les transformations suivantes :
+
+| Valeur | Résultat |
+|--------|----------|
+| `^` | Espace |
+| `?` | `null` |
+| `~` | `null` |
+| `??` | `?` |
+| `~~` | `~` |
+
+---
+
+## Cas d'utilisation
+
+### Cas 1 : Commande de backup
+
+```php
+$signature = 'backup {source} {destination} {format=zip} {excludes*} {--force}';
+$query = 'backup /var/www /backup tar.gz [cache, logs, tmp] --force';
+
+$result = $parser->parse($signature, $query);
+
+$source = $result->required->first()->value;        // '/var/www'
+$format = $result->default->first()->value;         // 'tar.gz'
+$excludes = $result->variadic->first()->values;     // ['cache', 'logs', 'tmp']
+$force = $result->flags->first()->value;            // true
+```
+
+### Cas 2 : Validation de commande
+
+```php
+$result = $parser->validate(
+    'backup {source} {destination}',
+    'backup /var/www'
+);
+
+if (!$result->isValid) {
+    foreach ($result->errors as $error) {
+        echo "Error: $error\n";
+    }
+    foreach ($result->suggestions as $suggestion) {
+        echo "Suggestion: $suggestion\n";
+    }
+}
+```
+
+### Cas 3 : Validation de signature
+
+```php
+$result = $parser->validateSignature('backup {source} {format=zip} {excludes*} {--force}');
+
+if ($result->isValid) {
+    echo "✅ Signature valide\n";
+} else {
+    foreach ($result->errors as $error) {
+        echo "❌ $error\n";
+    }
+}
+```
+
+---
 
 ## Flux d'exécution
 
 ```
-Signature et Query
+Signature + Query
     ↓
 extractSignatureElements() / extractQueryElements()
     ↓
-StringTypedCollection (éléments bruts)
+validateSignatureOrder() → Vérifie l'ordre
     ↓
 SourceParser → extrait 'source'
     ↓
 RequiredParser → extrait 'required'
-    ↓
-NullableParser → extrait 'nullable'
     ↓
 DefaultParser → extrait 'default'
     ↓
@@ -242,64 +318,23 @@ VariadicParser → extrait 'variadic'
     ↓
 FlagParser → extrait 'flags'
     ↓
-buildRecord() → construit les collections
+TextFormatter → formate les valeurs
     ↓
-NormalizerChain::normalize() → normalise les données
+buildRecord() → construit ParsedSignatureRecord
     ↓
-TextFormatter::format() → remplace ^ par espaces
-    ↓
-ParsedSignatureRecord::from() → retourne le record typé
+Retourne ParsedSignatureRecord
 ```
 
 ## Gestion des erreurs
 
-Aucune exception n'est levée par le parser principal. Les valeurs manquantes sont remplacées par :
-
-| Situation | Valeur retournée |
-|-----------|------------------|
-| Source manquante | `''` (chaîne vide) |
-| Argument requis manquant | `''` (chaîne vide) |
-| Valeur par défaut manquante | La valeur par défaut définie dans la signature |
-| Valeur nullable non fournie | `null` |
-| Variadique manquant | `[]` (tableau vide) |
-| Flag manquant | `false` |
-
-## Intégration
-
-### Avec SignatureVO
-
-```php
-use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
-
-$vo = new SignatureVO(
-    'backup {source} {destination} {--force}',
-    'backup /var/www /backup --force'
-);
-
-$source = $vo->getSource();              // 'backup'
-$destination = $vo->getRequired('destination'); // '/backup'
-$force = $vo->getFlag('force');          // true
-```
-
-### Avec un framework Symfony Console
-
-```php
-use Symfony\Component\Console\Command\Command;
-use AndyDefer\SignatureParser\SignatureParser;
-
-class BackupCommand extends Command
-{
-    protected function execute(InputInterface $input, OutputInterface $output): int
-    {
-        $parser = new SignatureParser();
-        $result = $parser->parse(
-            'backup {source} {destination} {format=zip} {--force}',
-            $input->getArgument('source') . ' ' . $input->getArgument('destination')
-        );
-        // ...
-    }
-}
-```
+| Situation | Exception / Comportement | Message |
+|-----------|--------------------------|---------|
+| Ordre invalide | `InvalidArgumentException` | `Invalid signature order: {error}` |
+| Défaut vide `{name=}` | Exception dans DefaultParser | `Default argument 'name' cannot have empty value` |
+| Nullable invalide `{name?}` | Exception dans DefaultParser | `Invalid syntax '{name?}'. Use '{name=?}' instead` |
+| Signature vide | Validation échoue | `Signature cannot be empty` |
+| Token invalide | Validation échoue | `Invalid token syntax: '{token}'` |
+| Doublon d'argument | Validation échoue | `Duplicate argument name: '{name}'` |
 
 ## Performance
 
@@ -307,7 +342,8 @@ class BackupCommand extends Command
 |-----------|------------|---------|
 | `parse()` | O(n) | n = nombre d'éléments de la commande |
 | `validate()` | O(n) | Parcours des parseurs |
-| `extractSignatureElements()` | O(n) | Regex + boucle de construction |
+| `validateSignature()` | O(n) | Parcours des tokens |
+| `extractSignatureElements()` | O(n) | Regex + boucle |
 | `extractQueryElements()` | O(n) | Parcours des tokens |
 | `addParser()` | O(1) | Ajout en fin de tableau |
 | `removeParser()` | O(n) | Recherche et suppression |
@@ -332,63 +368,56 @@ use AndyDefer\SignatureParser\SignatureParser;
 
 $parser = new SignatureParser();
 
-$signature = 'backup {source} {destination} {format=zip} {output=dist} {env?} {excludes*} {purpose*} {--force} {--verbose}';
-$query = 'backup /home/user/My^Project /backup tar^gz [cache^folder, logs^folder] [home^data, models] --force';
+// 1. Parse
+$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {purpose*} {--force} {--verbose}';
+$query = 'backup /var/www /backup tar.gz staging [cache, logs, tmp] [home, data, models] --force';
 
 $result = $parser->parse($signature, $query);
 
 echo "Source: " . $result->source . "\n";
-
 echo "Arguments requis:\n";
 foreach ($result->required as $arg) {
     echo "  {$arg->name}: {$arg->value}\n";
 }
-
 echo "Valeurs par défaut:\n";
 foreach ($result->default as $arg) {
     echo "  {$arg->name}: {$arg->value}\n";
 }
-
-echo "Arguments nullables:\n";
-foreach ($result->nullable as $arg) {
-    echo "  {$arg->name}: " . ($arg->value ?? 'null') . "\n";
-}
-
 echo "Arguments variadiques:\n";
 foreach ($result->variadic as $arg) {
     echo "  {$arg->name}: " . implode(', ', $arg->values->toArray()) . "\n";
 }
-
 echo "Flags:\n";
 foreach ($result->flags as $flag) {
     echo "  {$flag->name}: " . ($flag->value ? 'true' : 'false') . "\n";
 }
 
-// Validation
+// 2. Validation de requête
 $validation = $parser->validate($signature, $query);
 if (!$validation->isValid) {
-    echo "\nErreurs de validation:\n";
+    echo "Erreurs:\n";
     foreach ($validation->errors as $error) {
         echo "  - $error\n";
     }
 }
 
-$signatureElements = $parser->extractSignatureElements($signature);
-$queryElements = $parser->extractQueryElements($query);
+// 3. Validation de signature
+$sigValidation = $parser->validateSignature($signature);
+if ($sigValidation->isValid) {
+    echo "✅ Signature valide\n";
+}
 
-echo "\nÉléments signature: " . implode(', ', $signatureElements->toArray()) . "\n";
-echo "Éléments query: " . implode(', ', $queryElements->toArray()) . "\n";
+// 4. Extraction
+$elements = $parser->extractSignatureElements($signature);
+echo "Éléments signature: " . implode(', ', $elements->toArray()) . "\n";
 ```
 
 ## Voir aussi
 
 - `ParsedSignatureRecord` - Structure de données retournée
-- `ValidationResultRecord` - Résultat de validation
 - `ParserInterface` - Contrat pour les parseurs personnalisés
-- `SignatureVO` - Value Object pour l'accès simplifié
+- `TextFormatter` - Formateur des valeurs
 - `SignatureStructureVO` - Value Object pour l'analyse de structure
-- `StringTypedCollection` - Collection typée pour les chaînes
-- `TextFormatter` - Formateur pour le remplacement des caractères
-- `ArgumentCollection` - Collection d'arguments
-- `FlagCollection` - Collection de flags
+- `SignatureVO` - Value Object pour l'analyse complète
+- `ValidationResultRecord` - Résultat de validation
 ---

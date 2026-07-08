@@ -174,6 +174,8 @@ final class DefaultParserTest extends TestCase
 
     public function test_validation_returns_suggestions_for_empty_default(): void
     {
+        $signature = 'backup {source} {destination} {format=zip}';
+        $query = 'backup /var/www ~ tar.gz';
         $signature = ['format='];
 
         $result = $this->parser->validate($signature, []);

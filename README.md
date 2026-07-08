@@ -1,7 +1,9 @@
+Tu as raison, désolé ! J'ai supprimé trop de contenu. Voici le README complet avec tout le contenu restauré :
+
 ```markdown
 # PHP Signature Parser
 
-**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les variadiques et les options avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^`.**
+**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les nullables, les variadiques et les flags avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^` et des tokens spéciaux (`?`, `~`).**
 
 [![PHP Version](https://img.shields.io/badge/PHP-8.1%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -13,21 +15,23 @@
 1. [Installation](#installation)
 2. [Concepts fondamentaux](#concepts-fondamentaux)
 3. [Formatage des espaces avec `^`](#formatage-des-espaces-avec-)
-4. [Ordre strict des arguments](#ordre-strict-des-arguments)
-5. [Utilisation du parseur](#utilisation-du-parseur)
-6. [Manipulation des collections](#manipulation-des-collections)
+4. [Tokens spéciaux](#tokens-spéciaux)
+   - [Le token `?` (null explicite)](#le-token--null-explicite)
+   - [Le token `~` (skip)](#le-token--skip)
+5. [Ordre strict des arguments](#ordre-strict-des-arguments)
+6. [Utilisation du parseur](#utilisation-du-parseur)
+7. [Manipulation des collections](#manipulation-des-collections)
    - [ArgumentCollection](#argumentcollection)
-   - [OptionCollection](#optioncollection)
+   - [FlagCollection](#flagcollection)
    - [VariadicArgumentCollection](#variadicargumentcollection)
-7. [Value Objects](#value-objects)
+8. [Value Objects](#value-objects)
    - [SignatureStructureVO](#signaturestructurevo)
    - [SignatureVO](#signaturevo)
-8. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
-9. [Les parseurs internes](#les-parseurs-internes)
-10. [Extensibilité](#extensibilité)
-11. [Cas d'usage avancés](#cas-dusage-avancés)
-12. [Exemples complets](#exemples-complets)
-13. [Tests](#tests)
+9. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
+10. [Les parseurs internes](#les-parseurs-internes)
+11. [Extensibilité](#extensibilité)
+12. [Cas d'usage avancés](#cas-dusage-avancés)
+13. [Exemples complets](#exemples-complets)
 14. [Licence](#licence)
 
 ---
@@ -51,7 +55,7 @@ composer require andydefer/php-signature-parser
 La signature est une chaîne qui décrit la structure de la commande.
 
 ```php
-$signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
+$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {purpose*} {--force} {--verbose}';
 ```
 
 | Élément | Syntaxe | Description |
@@ -59,15 +63,16 @@ $signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes
 | **Source** | `backup` | Nom de la commande (position 0) |
 | **Requis** | `{source}` | Argument obligatoire |
 | **Par défaut** | `{format=zip}` | Argument avec valeur par défaut |
+| **Nullable** | `{env=?}` | Argument pouvant être `null` |
 | **Variadique** | `{excludes*}` | Argument qui capture plusieurs valeurs |
-| **Option** | `{--force}` | Flag optionnel (booléen) |
+| **Flag** | `{--force}` | Flag optionnel (booléen) |
 
 ### La requête
 
 La requête est la commande réelle exécutée par l'utilisateur.
 
 ```php
-$query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models] --force';
+$query = 'backup /var/www /backup tar.gz staging [cache, logs, tmp] [home, data, models] --force';
 ```
 
 ---
@@ -124,6 +129,57 @@ $result = $parser->parse($signature, $query);
 
 ---
 
+## Tokens spéciaux
+
+### Le token `?` (null explicite)
+
+Le token `?` permet de passer explicitement `null` comme valeur.
+
+| Cas | Exemple | Résultat |
+|-----|---------|----------|
+| Argument requis | `backup /var/www ?` | `destination = null` |
+| Argument par défaut | `deploy staging ?` | `env = null` (override) |
+
+### Le token `~` (skip)
+
+Le token `~` permet de sauter un argument et d'utiliser la valeur par défaut ou `null` :
+
+| Cas | Comportement |
+|-----|--------------|
+| **Argument requis** | `~` → `null` |
+| **Argument par défaut** | `~` → utilise la valeur par défaut |
+| **Argument nullable** | `~` → `null` |
+
+### Exemples
+
+```php
+// Requis → null
+$signature = 'backup {source} {destination}';
+$query = 'backup /var/www ~';
+// destination = null
+
+// Par défaut → valeur par défaut
+$signature = 'backup {source} {format=zip}';
+$query = 'backup /var/www ~';
+// format = zip
+
+// Nullable → null
+$signature = 'deploy {env=?} {--force}';
+$query = 'deploy ~ --force';
+// env = null
+```
+
+### Tokens échappés
+
+| Valeur | Résultat | Description |
+|--------|----------|-------------|
+| `??` | `?` | Point d'interrogation littéral |
+| `~~` | `~` | Tilde littéral |
+| `?` | `null` | Valeur null |
+| `~` | `null` | Skip |
+
+---
+
 ## Ordre strict des arguments
 
 ⚠️ **L'ordre des éléments dans la signature est STRICT et IMPÉRATIF.**
@@ -133,8 +189,9 @@ $result = $parser->parse($signature, $query);
 | **1** | **Source** | `command` | `backup` |
 | **2** | **Requis** | `{name}` | `{source}` `{destination}` |
 | **3** | **Par défaut** | `{name=value}` | `{format=zip}` `{output=dist}` |
-| **4** | **Variadique** | `{name*}` | `{excludes*}` `{purpose*}` |
-| **5** | **Options** | `{--flag}` | `{--force}` `{--verbose}` |
+| **4** | **Nullable** | `{name=?}` | `{env=?}` `{port=?}` |
+| **5** | **Variadique** | `{name*}` | `{excludes*}` `{purpose*}` |
+| **6** | **Flags** | `{--flag}` | `{--force}` `{--verbose}` |
 
 ### Règles strictes
 
@@ -142,10 +199,34 @@ $result = $parser->parse($signature, $query);
 |-------|-------------|
 | **Source** | Toujours en première position (position 0) |
 | **Requis** | Viennent en premier, avant tous les autres |
-| **Par défaut** | Viennent après les requis, avant les variadiques |
+| **Par défaut** | Viennent après les requis, avant les nullables et variadiques |
+| **Nullable** | `{name=?}` - Viennent après les par défaut, avant les variadiques |
 | **Variadiques** | Toujours en dernière position des arguments |
-| **Options** | Peuvent être à n'importe quelle position après la source |
+| **Flags** | Peuvent être à n'importe quelle position après la source |
 | **Ordre de la requête** | Doit respecter l'ordre de la signature |
+
+### Exemples d'ordre valide
+
+```php
+// ✅ Ordre correct
+$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {--force}';
+
+// ✅ Flags à la fin ou entre
+$signature = 'backup {source} {--force} {destination} {format=zip}';
+```
+
+### Exemples d'ordre invalide
+
+```php
+// ❌ Requis après défaut
+$signature = 'backup {format=zip} {source}';
+
+// ❌ Variadique avant défaut
+$signature = 'backup {excludes*} {format=zip}';
+
+// ❌ Flag avant arguments
+$signature = 'backup {--force} {source}';
+```
 
 ---
 
@@ -159,10 +240,10 @@ $result = $parser->parse($signature, $query);
 use AndyDefer\SignatureParser\SignatureParser;
 
 // Définition de la commande
-$signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
+$signature = 'backup {source} {destination} {format=zip} {output=dist} {env=?} {excludes*} {purpose*} {--force} {--verbose}';
 
 // Commande exécutée
-$query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models] --force';
+$query = 'backup /var/www /backup tar.gz dist staging [cache, logs, tmp] [home, data, models] --force';
 
 // Parse
 $parser = new SignatureParser();
@@ -173,7 +254,7 @@ echo $result->source;                                      // 'backup'
 echo $result->required->first()->value;                   // '/var/www'
 echo $result->default->first()->value;                    // 'tar.gz'
 echo $result->variadic->first()->values->first();         // 'cache'
-echo $result->options->first()->value;                    // true
+echo $result->flags->first()->value;                      // true
 ```
 
 ### Parcours des collections
@@ -200,19 +281,51 @@ foreach ($result->variadic as $arg) {
 // excludes: cache, logs, tmp
 // purpose: home, data, models
 
-// Parcours des options
-foreach ($result->options as $opt) {
-    echo "{$opt->name}: " . ($opt->value ? 'true' : 'false') . "\n";
+// Parcours des flags
+foreach ($result->flags as $flag) {
+    echo "{$flag->name}: " . ($flag->value ? 'true' : 'false') . "\n";
 }
 // force: true
 // verbose: false
+```
+
+### Validation de requête
+
+```php
+$result = $parser->validate(
+    'backup {source} {destination}',
+    'backup /var/www'
+);
+
+if (!$result->isValid) {
+    foreach ($result->errors as $error) {
+        echo "❌ $error\n";
+    }
+    foreach ($result->suggestions as $suggestion) {
+        echo "💡 $suggestion\n";
+    }
+}
+```
+
+### Validation de signature
+
+```php
+$result = $parser->validateSignature('backup {source} {format=zip} {excludes*} {--force}');
+
+if ($result->isValid) {
+    echo "✅ Signature valide\n";
+} else {
+    foreach ($result->errors as $error) {
+        echo "❌ $error\n";
+    }
+}
 ```
 
 ---
 
 ## Manipulation des collections
 
-Le résultat du parseur (`ParsedSignatureRecord`) contient 4 collections typées qui offrent des méthodes utilitaires pour interagir avec les données.
+Le résultat du parseur (`ParsedSignatureRecord`) contient 4 collections typées.
 
 ### ArgumentCollection
 
@@ -264,37 +377,37 @@ $payload = $result->required->toAssociativeArray();
 
 ---
 
-### OptionCollection
+### FlagCollection
 
-Collection d'options (`OptionRecord`) avec leurs noms et valeurs booléennes.
+Collection de flags (`FlagRecord`) avec leurs noms et valeurs booléennes.
 
 ```php
-use AndyDefer\SignatureParser\Collections\OptionCollection;
-use AndyDefer\SignatureParser\Records\OptionRecord;
+use AndyDefer\SignatureParser\Collections\FlagCollection;
+use AndyDefer\SignatureParser\Records\FlagRecord;
 
-$collection = new OptionCollection();
+$collection = new FlagCollection();
 $collection->add(
-    new OptionRecord('force', true),
-    new OptionRecord('verbose', false),
-    new OptionRecord('all', true)
+    new FlagRecord('force', true),
+    new FlagRecord('verbose', false),
+    new FlagRecord('all', true)
 );
 
-// Récupérer la valeur d'une option
+// Récupérer la valeur d'un flag
 $force = $collection->get('force');          // true
 $verbose = $collection->get('verbose');      // false
 $unknown = $collection->get('unknown');      // false (par défaut)
 
-// Vérifier si une option existe
+// Vérifier si un flag existe
 if ($collection->has('force')) {
-    echo "Option force présente";
+    echo "Flag force présent";
 }
 
-// Vérifier si une option est active
+// Vérifier si un flag est actif
 if ($collection->isActive('force')) {
     echo "Mode force activé";
 }
 
-// Récupérer toutes les options actives
+// Récupérer tous les flags actifs
 $active = $collection->getActiveNames();     // ['force', 'all']
 
 // Récupérer tous les noms
@@ -304,17 +417,17 @@ $names = $collection->getNames();            // ['force', 'verbose', 'all']
 $assoc = $collection->toAssociativeArray();  // ['force' => true, 'verbose' => false, 'all' => true]
 ```
 
-#### Cas d'usage : Validation des options
+#### Cas d'usage : Validation des flags
 
 ```php
-// Vérification des options requises
-if (!$result->options->isActive('force')) {
-    echo "L'option --force est requise pour cette opération";
+// Vérification des flags requis
+if (!$result->flags->isActive('force')) {
+    echo "Le flag --force est requis pour cette opération";
 }
 
-// Liste des options actives
-$activeOptions = $result->options->getActiveNames();
-echo "Options actives: " . implode(', ', $activeOptions);
+// Liste des flags actifs
+$activeFlags = $result->flags->getActiveNames();
+echo "Flags actifs: " . implode(', ', $activeFlags);
 ```
 
 ---
@@ -378,7 +491,7 @@ if ($result->variadic->has('files')) {
 
 ### SignatureStructureVO
 
-Analyse UNIQUEMENT la structure d'une signature (sans requête).
+Analyse UNIQUEMENT la structure d'une signature (sans requête) et la valide.
 
 ```php
 <?php
@@ -399,12 +512,21 @@ if ($vo->hasRequired('source')) {
 $requireds = $vo->getRequireds();    // ['source', 'destination']
 $defaults = $vo->getDefaults();      // ['format' => 'zip']
 $variadics = $vo->getVariadics();    // ['excludes']
-$options = $vo->getOptions();        // ['force']
+$flags = $vo->getFlags();            // ['force']
 
 // Structure complète typée
 $structure = $vo->getValue();
 echo $structure->source;             // 'backup'
 echo $structure->default->format;    // 'zip'
+
+// Validation de la signature
+if ($vo->isValid()) {
+    echo "✅ Signature valide";
+} else {
+    foreach ($vo->getValidationErrors() as $error) {
+        echo "❌ $error\n";
+    }
+}
 ```
 
 #### Cas d'usage : Génération de documentation
@@ -434,11 +556,11 @@ function generateCommandHelp(string $signature): string
         $help .= "\n";
     }
     
-    // Options
-    if ($vo->hasOptions()) {
-        $help .= "Options:\n";
-        foreach ($vo->getOptions() as $opt) {
-            $help .= "  --$opt\n";
+    // Flags
+    if ($vo->hasFlags()) {
+        $help .= "Flags:\n";
+        foreach ($vo->getFlags() as $flag) {
+            $help .= "  --$flag\n";
         }
     }
     
@@ -452,7 +574,7 @@ echo generateCommandHelp('deploy {env=production} {--force} {--verbose}');
 // Arguments optionnels:
 //   <env> (défaut: production)
 // 
-// Options:
+// Flags:
 //   --force
 //   --verbose
 ```
@@ -477,22 +599,29 @@ $vo = new SignatureVO(
 echo $vo->getSource();                    // 'backup'
 echo $vo->getRequired('source');          // '/var/www'
 echo $vo->getDefault('format');           // 'tar.gz'
-echo $vo->getOption('force');             // true
+echo $vo->getFlag('force');               // true
 
 // Vérification de présence
-if ($vo->hasOption('force')) {
+if ($vo->hasFlag('force')) {
     echo "Force mode activé\n";
 }
 
 // Récupération complète
 $requireds = $vo->getRequireds();    // ['source' => '/var/www', 'destination' => '/backup']
 $defaults = $vo->getDefaults();      // ['format' => 'tar.gz']
-$options = $vo->getOptions();        // ['force' => true]
+$flags = $vo->getFlags();            // ['force' => true]
 
 // Accès via objet typé
 $parsed = $vo->getParsed();
 echo $parsed->source;                // 'backup'
 echo $parsed->required['source'];    // '/var/www'
+
+// Validation
+if (!$vo->isValid()) {
+    foreach ($vo->getValidationErrors() as $error) {
+        echo "❌ $error\n";
+    }
+}
 ```
 
 #### Cas d'usage : Validation de commande
@@ -505,14 +634,14 @@ function validateCommand(string $signature, string $query): array
 
     // Vérification des arguments requis
     foreach ($vo->getRequireds() as $name => $value) {
-        if (empty($value)) {
+        if (empty($value) || $value === '~') {
             $errors[] = "L'argument '$name' est requis";
         }
     }
 
-    // Vérification des options obligatoires
-    if ($vo->hasOption('force') && !$vo->getOption('force')) {
-        $errors[] = "L'option --force est obligatoire";
+    // Vérification des flags obligatoires
+    if ($vo->hasFlag('force') && !$vo->getFlag('force')) {
+        $errors[] = "Le flag --force est obligatoire";
     }
 
     return $errors;
@@ -533,7 +662,7 @@ if (empty($errors)) {
     }
 }
 // Erreurs:
-//   - L'option --force est obligatoire
+//   - Le flag --force est obligatoire
 ```
 
 ---
@@ -562,9 +691,9 @@ Le package utilise une **chaîne de responsabilité** (Chain of Responsibility) 
 |--------|------|---------|----------|
 | `SourceParser` | Nom de la commande | `command` | 1 |
 | `RequiredParser` | Arguments requis | `{name}` | 2 |
-| `DefaultParser` | Valeurs par défaut | `{name=value}` | 3 |
+| `DefaultParser` | Par défaut et nullables | `{name=value}`, `{name=?}` | 3 |
 | `VariadicParser` | Arguments variadiques | `{name*}` | 4 |
-| `OptionsParser` | Options | `{--flag}` | 5 |
+| `FlagParser` | Flags | `{--flag}` | 5 |
 
 ---
 
@@ -577,19 +706,34 @@ Le package utilise une **chaîne de responsabilité** (Chain of Responsibility) 
 
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
+use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 use AndyDefer\SignatureParser\SignatureParser;
+use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 
 final class CustomParser implements ParserInterface
 {
     public function parse(array $signature, array $query): ParsedResultRecord
     {
         // Votre logique personnalisée
-        // Ici on ajoute un champ 'custom' au résultat
         return ParsedResultRecord::from([
             'data' => ['custom' => 'valeur_personnalisee'],
             'signature' => $signature,
             'query' => $query,
         ]);
+    }
+
+    public function validate(array $signature, array $query): ValidationResultRecord
+    {
+        return new ValidationResultRecord(
+            isValid: true,
+            errors: new StringTypedCollection,
+            suggestions: new StringTypedCollection
+        );
+    }
+
+    public function getTokenPattern(): string
+    {
+        return '/^custom_[a-zA-Z_][a-zA-Z0-9_]*$/';
     }
 }
 
@@ -603,10 +747,10 @@ echo $result->custom;  // 'valeur_personnalisee'
 ### Supprimer un parseur
 
 ```php
-// Supprime le parseur d'options
-$parser->removeParser(OptionsParser::class);
+// Supprime le parseur de flags
+$parser->removeParser(FlagParser::class);
 
-// Les options ne seront plus extraites
+// Les flags ne seront plus extraits
 $result = $parser->parse($signature, $query);
 ```
 
@@ -646,12 +790,12 @@ class SimpleCli
         $command = $this->commands[$commandName];
         $vo = new SignatureVO($command['signature'], $query);
         
-        // Récupère les arguments et options
+        // Récupère les arguments et flags
         $args = $vo->getRequireds();
-        $options = $vo->getOptions();
+        $flags = $vo->getFlags();
         
         // Exécute le handler
-        $command['handler']($args, $options);
+        $command['handler']($args, $flags);
     }
 }
 
@@ -659,9 +803,9 @@ class SimpleCli
 $app = new SimpleCli();
 
 // Enregistrement d'une commande avec espaces dans les valeurs
-$app->register('backup', 'backup {source} {destination} {--force}', function($args, $options) {
+$app->register('backup', 'backup {source} {destination} {--force}', function($args, $flags) {
     echo "Sauvegarde de {$args['source']} vers {$args['destination']}\n";
-    if ($options['force'] ?? false) {
+    if ($flags['force'] ?? false) {
         echo "Mode forcé activé\n";
     }
 });
@@ -718,11 +862,11 @@ class DocumentationGenerator
             
             $content .= "\n\n";
             
-            // Options
-            if ($vo->hasOptions()) {
-                $content .= "**Options:**\n";
-                foreach ($vo->getOptions() as $opt) {
-                    $content .= "- `--$opt`\n";
+            // Flags
+            if ($vo->hasFlags()) {
+                $content .= "**Flags:**\n";
+                foreach ($vo->getFlags() as $flag) {
+                    $content .= "- `--$flag`\n";
                 }
                 $content .= "\n";
             }
@@ -769,10 +913,10 @@ function validateBackupCommand(string $query): array
         $errors[] = "La destination est requise";
     }
     
-    // Vérification des options
-    $activeOptions = $result->options->getActiveNames();
-    if (in_array('verbose', $activeOptions) && !in_array('force', $activeOptions)) {
-        $errors[] = "L'option --verbose nécessite --force";
+    // Vérification des flags
+    $activeFlags = $result->flags->getActiveNames();
+    if (in_array('verbose', $activeFlags) && !in_array('force', $activeFlags)) {
+        $errors[] = "Le flag --verbose nécessite --force";
     }
     
     // Vérification des valeurs
@@ -786,7 +930,32 @@ function validateBackupCommand(string $query): array
 
 $errors = validateBackupCommand('backup /var/www /backup --verbose');
 // Erreurs:
-//   - L'option --verbose nécessite --force
+//   - Le flag --verbose nécessite --force
+```
+
+### Cas 4 : Validation de signature
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\SignatureParser;
+
+$parser = new SignatureParser();
+
+// Validation d'une signature valide
+$result = $parser->validateSignature('backup {source} {destination} {format=zip} {excludes*} {--force}');
+if ($result->isValid) {
+    echo "✅ Signature valide\n";
+}
+
+// Validation d'une signature invalide (ordre)
+$result = $parser->validateSignature('backup {format=zip} {source} {--force}');
+if (!$result->isValid) {
+    foreach ($result->errors as $error) {
+        echo "❌ $error\n";
+    }
+    // ❌ Required argument 'source' must appear before default, variadic or flags
+}
 ```
 
 ---
@@ -801,8 +970,8 @@ $errors = validateBackupCommand('backup /var/www /backup --verbose');
 use AndyDefer\SignatureParser\SignatureParser;
 
 // Signature et requête avec espaces dans les valeurs
-$signature = 'backup {source} {destination} {format=zip} {excludes*} {--force}';
-$query = 'backup /home/user/My^Project /backup tar^gz [cache^folder, logs^folder] --force';
+$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {--force}';
+$query = 'backup /home/user/My^Project /backup tar^gz staging [cache^folder, logs^folder] --force';
 
 // Parsing
 $parser = new SignatureParser();
@@ -813,8 +982,9 @@ echo "Source: " . $result->source . "\n";  // 'backup'
 echo "Source path: " . $result->required->first()->value . "\n";  // '/home/user/My Project'
 echo "Destination: " . $result->required->last()->value . "\n";   // '/backup'
 echo "Format: " . $result->default->first()->value . "\n";        // 'tar gz'
+echo "Env: " . $result->default->last()->value . "\n";            // 'staging'
 echo "Excludes: " . implode(', ', $result->variadic->first()->values->toArray()) . "\n";  // 'cache folder, logs folder'
-echo "Force: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";  // 'Oui'
+echo "Force: " . ($result->flags->first()->value ? 'Oui' : 'Non') . "\n";  // 'Oui'
 ```
 
 ### Exemple 2 : Commande utilisateur avec nom complet
@@ -824,8 +994,8 @@ echo "Force: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";  // 
 
 use AndyDefer\SignatureParser\SignatureParser;
 
-$signature = 'user:create {name} {email} {--role}';
-$query = 'user:create John^Doe john@example.com --role';
+$signature = 'user:create {name} {email} {--admin}';
+$query = 'user:create John^Doe john@example.com --admin';
 
 $parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
@@ -833,7 +1003,7 @@ $result = $parser->parse($signature, $query);
 echo "Source: " . $result->source . "\n";                       // 'user:create'
 echo "Nom: " . $result->required->first()->value . "\n";        // 'John Doe'
 echo "Email: " . $result->required->last()->value . "\n";       // 'john@example.com'
-echo "Role: " . ($result->options->first()->value ? 'Oui' : 'Non') . "\n";  // 'Oui'
+echo "Admin: " . ($result->flags->first()->value ? 'Oui' : 'Non') . "\n";  // 'Oui'
 ```
 
 ### Exemple 3 : Commande avec message long
@@ -867,8 +1037,8 @@ $full = new SignatureVO(
 );
 
 echo "Environnement: " . $full->getDefault('env') . "\n";  // 'staging server'
-echo "Force: " . ($full->getOption('force') ? 'Oui' : 'Non') . "\n";  // 'Oui'
-echo "Verbose: " . ($full->getOption('verbose') ? 'Oui' : 'Non') . "\n";  // 'Non'
+echo "Force: " . ($full->getFlag('force') ? 'Oui' : 'Non') . "\n";  // 'Oui'
+echo "Verbose: " . ($full->getFlag('verbose') ? 'Oui' : 'Non') . "\n";  // 'Non'
 ```
 
 ### Exemple 5 : Manipulation des collections (cas concret)
@@ -902,19 +1072,52 @@ echo "Output: $output\n";
 echo "Files to process: " . implode(', ', $files) . "\n";
 echo "Total: $totalFiles fichiers\n";
 
-// Vérification des options
-if ($result->options->isActive('verbose')) {
+// Vérification des flags
+if ($result->flags->isActive('verbose')) {
     echo "Mode verbose activé\n";
 }
 
-if ($result->options->isActive('force')) {
+if ($result->flags->isActive('force')) {
     echo "Mode forcé activé\n";
 }
 
-// Liste des options actives
-$activeOptions = $result->options->getActiveNames();
-if (!empty($activeOptions)) {
-    echo "Options actives: " . implode(', ', $activeOptions) . "\n";
+// Liste des flags actifs
+$activeFlags = $result->flags->getActiveNames();
+if (!empty($activeFlags)) {
+    echo "Flags actifs: " . implode(', ', $activeFlags) . "\n";
+}
+```
+
+### Exemple 6 : Validation de signature
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\SignatureParser;
+
+$parser = new SignatureParser();
+
+// Signatures à valider
+$signatures = [
+    'backup {source} {destination} {--force}',                    // ✅ Valide
+    'backup {format=zip} {source} {--force}',                     // ❌ Ordre invalide
+    'backup {source} {invalid!} {--force}',                       // ❌ Token invalide
+    'backup {source} {source} {--force}',                         // ❌ Doublon
+];
+
+foreach ($signatures as $signature) {
+    $result = $parser->validateSignature($signature);
+    
+    echo "Signature: $signature\n";
+    if ($result->isValid) {
+        echo "  ✅ Valide\n";
+    } else {
+        echo "  ❌ Invalide:\n";
+        foreach ($result->errors as $error) {
+            echo "    - $error\n";
+        }
+    }
+    echo "\n";
 }
 ```
 

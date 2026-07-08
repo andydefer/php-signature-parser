@@ -169,6 +169,101 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
     }
 
     /**
+     * {@inheritDoc}
+     */
+    public function validateSignature(string $signature): ValidationResultRecord
+    {
+        $errors = new StringTypedCollection;
+        $suggestions = new StringTypedCollection;
+
+        $elements = $this->extractSignatureElements($signature);
+
+        if ($elements->isEmpty()) {
+            $errors->add('Signature cannot be empty');
+
+            return new ValidationResultRecord(
+                isValid: false,
+                errors: $errors,
+                suggestions: $suggestions
+            );
+        }
+
+        // Vérifier l'ordre
+        $orderErrors = $this->validateSignatureOrder($elements);
+        foreach ($orderErrors as $error) {
+            $errors->add($error);
+        }
+
+        // Vérifier chaque token avec le pattern de chaque parseur
+        foreach ($elements as $index => $element) {
+            if ($index === 0) {
+                // Source: pattern simple
+                $sourcePattern = '/^[a-zA-Z_][a-zA-Z0-9_\-]*$/';
+                if (! preg_match($sourcePattern, $element)) {
+                    $errors->add("Invalid source name: '{$element}'");
+                    $suggestions->add('Use only letters, numbers, underscores and hyphens for source name');
+                }
+
+                continue;
+            }
+
+            $isValid = false;
+            $matchedParser = null;
+            $patterns = [
+                'default' => '/^[a-zA-Z_][a-zA-Z0-9_]*=(?:[^=]+|\?)$/',
+                'variadic' => '/^[a-zA-Z_][a-zA-Z0-9_]*\*$/',
+                'flag' => '/^--[a-zA-Z_][a-zA-Z0-9_]*$/',
+                'required' => '/^[a-zA-Z_][a-zA-Z0-9_]*$/',
+            ];
+
+            foreach ($patterns as $type => $pattern) {
+                if (preg_match($pattern, $element)) {
+                    $isValid = true;
+                    $matchedParser = $type;
+                    break;
+                }
+            }
+
+            if (! $isValid) {
+                $errors->add("Invalid token syntax: '{$element}'");
+                $suggestions->add('Check the syntax: required ({name}), default ({name=value}), variadic ({name*}), flag ({--flag})');
+            }
+        }
+
+        // Vérifier les doublons
+        $seen = [];
+        foreach ($elements as $index => $element) {
+            if ($index === 0) {
+                continue;
+            }
+
+            $normalizedName = ltrim($element, '--');
+            $normalizedName = rtrim($normalizedName, '*');
+            $normalizedName = explode('=', $normalizedName)[0];
+
+            if (isset($seen[$normalizedName])) {
+                $errors->add("Duplicate argument name: '{$normalizedName}'");
+                $suggestions->add("Rename or remove duplicate argument '{$normalizedName}'");
+            }
+            $seen[$normalizedName] = true;
+        }
+
+        return new ValidationResultRecord(
+            isValid: $errors->isEmpty(),
+            errors: $errors,
+            suggestions: $suggestions
+        );
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function isSignatureValid(string $signature): bool
+    {
+        return $this->validateSignature($signature)->isValid;
+    }
+
+    /**
      * Validates the order of arguments in the signature.
      *
      * Expected order:

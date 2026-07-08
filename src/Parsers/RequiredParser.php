@@ -125,4 +125,9 @@ final class RequiredParser implements ParserInterface
                ! str_ends_with($element, '?') &&
                ! str_starts_with($element, '--');
     }
+
+    public function getTokenPattern(): string
+    {
+        return '/^[a-zA-Z_][a-zA-Z0-9_]*$/';
+    }
 }

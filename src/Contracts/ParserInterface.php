@@ -38,4 +38,20 @@ interface ParserInterface
      * @return ValidationResultRecord The validation result with errors and suggestions
      */
     public function validate(array $signature, array $query): ValidationResultRecord;
+
+    /**
+     * Returns the regular expression pattern that matches valid token syntax for this parser.
+     *
+     * This pattern is used to validate individual tokens in the signature.
+     * Each parser defines what a valid token looks like for its specific type.
+     *
+     * @return string The regex pattern for valid token syntax
+     *
+     * @example
+     * // RequiredParser returns: '/^[a-zA-Z_][a-zA-Z0-9_]*$/'
+     * // DefaultParser returns: '/^[a-zA-Z_][a-zA-Z0-9_]*=[^=]+$/'
+     * // FlagParser returns: '/^--[a-zA-Z_][a-zA-Z0-9_]*$/'
+     * // VariadicParser returns: '/^[a-zA-Z_][a-zA-Z0-9_]*\*$/'
+     */
+    public function getTokenPattern(): string;
 }
