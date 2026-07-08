@@ -9,18 +9,6 @@ use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 
-/**
- * Parses default and nullable arguments from a command signature.
- *
- * Handles:
- * - `{name=value}`: Default value when no query value is provided
- * - `{name=?}`: Nullable argument (implicitly null)
- * - `~`: Skip argument, use default value or null
- *
- * Invalid syntaxes:
- * - `{name?}`: Invalid (throws exception)
- * - `{name=}`: Invalid (throws exception)
- */
 final class DefaultParser implements ParserInterface
 {
     private const SKIP_TOKEN = '~';
@@ -28,7 +16,6 @@ final class DefaultParser implements ParserInterface
     public function parse(array $signature, array $query): ParsedResultRecord
     {
         $defaults = [];
-        $nullables = [];
         $newSignature = [];
         $newQuery = [];
         $queryIndex = 0;
@@ -41,27 +28,16 @@ final class DefaultParser implements ParserInterface
             if ($isDefault || $isNullable) {
                 $name = $element;
                 $defaultValue = null;
-                $isNullableArg = false;
 
                 if ($isDefault) {
                     [$name, $defaultValue] = explode('=', $element, 2);
 
-                    // {name=} → invalide
                     if ($defaultValue === '') {
                         throw new \InvalidArgumentException(
                             "Default argument '{$name}' cannot have empty value. Use '{$name}=?' for nullable instead."
                         );
                     }
-
-                    // {name=?} → nullable
-                    if ($defaultValue === '?') {
-                        $isNullableArg = true;
-                        $nullables[$name] = null;
-
-                        continue;
-                    }
                 } elseif ($isNullable) {
-                    // {name?} → invalide
                     $nameWithoutQuestion = rtrim($element, '?');
                     throw new \InvalidArgumentException(
                         "Invalid syntax '{$element}'. Use '{$nameWithoutQuestion}=?' for nullable instead."
@@ -78,14 +54,9 @@ final class DefaultParser implements ParserInterface
                         break;
                     }
 
-                    // Si on trouve ~, on saute et on garde la valeur par défaut
                     if ($current === self::SKIP_TOKEN) {
                         $found = true;
                         $queryIndex = $i + 1;
-                        // Si c'est nullable et qu'on a ~, on garde null
-                        if ($isNullableArg) {
-                            $nullables[$name] = null;
-                        }
                         break;
                     }
 
@@ -98,19 +69,9 @@ final class DefaultParser implements ParserInterface
                 }
 
                 if ($found) {
-                    // Si c'est nullable, on met la valeur dans nullable
-                    if ($isNullableArg) {
-                        $nullables[$name] = $value;
-                    } else {
-                        $defaults[$name] = $value;
-                    }
+                    $defaults[$name] = $value;
                 } else {
-                    // Si c'est nullable et qu'aucune valeur n'est fournie, on garde null
-                    if ($isNullableArg) {
-                        $nullables[$name] = null;
-                    } else {
-                        $defaults[$name] = $defaultValue;
-                    }
+                    $defaults[$name] = $defaultValue;
                 }
             } else {
                 $newSignature[] = $element;
@@ -131,7 +92,6 @@ final class DefaultParser implements ParserInterface
         return ParsedResultRecord::from([
             'data' => [
                 'default' => $defaults,
-                'nullable' => $nullables,
             ],
             'signature' => $newSignature,
             'query' => $newQuery,
@@ -152,7 +112,6 @@ final class DefaultParser implements ParserInterface
                     $suggestions->add("Use '{$name}=?' for nullable instead of '{$name}='");
                 }
 
-                // Ignorer les nullables valides
                 if ($defaultValue === '?') {
                     continue;
                 }
