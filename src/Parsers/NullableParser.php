@@ -9,35 +9,60 @@ use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 
-final class FlagParser implements ParserInterface
+/**
+ * Parses nullable arguments from a command signature.
+ * Handles syntax: {name?}
+ */
+final class NullableParser implements ParserInterface
 {
     public function parse(array $signature, array $query): ParsedResultRecord
     {
-        $flags = [];
+        $nullables = [];
         $newSignature = [];
         $newQuery = [];
         $queryIndex = 0;
         $queryCount = count($query);
 
         foreach ($signature as $element) {
-            if (str_starts_with($element, '--')) {
-                $name = ltrim($element, '--');
+            if (str_ends_with($element, '?')) {
+                $name = rtrim($element, '?');
                 $found = false;
+                $value = null;
 
                 for ($i = $queryIndex; $i < $queryCount; $i++) {
-                    if ($query[$i] === $element) {
+                    $current = $query[$i];
+
+                    if (str_starts_with($current, '[') || str_starts_with($current, '--')) {
+                        break;
+                    }
+
+                    if (! empty($current) && ! str_starts_with($current, '[') && ! str_starts_with($current, '--')) {
+                        $value = $current;
                         $found = true;
+                        $queryIndex = $i + 1;
+                        break;
+                    }
+
+                    if ($current === '' && ! str_starts_with($current, '[') && ! str_starts_with($current, '--')) {
+                        $found = true;
+                        $value = null;
                         $queryIndex = $i + 1;
                         break;
                     }
                 }
 
-                $flags[$name] = $found;
+                if ($found) {
+                    $nullables[$name] = $value;
+                } else {
+                    $nullables[$name] = null;
+                }
             } else {
                 $newSignature[] = $element;
                 if ($queryIndex < $queryCount) {
                     $newQuery[] = $query[$queryIndex];
                     $queryIndex++;
+                } else {
+                    $newQuery[] = '';
                 }
             }
         }
@@ -48,7 +73,7 @@ final class FlagParser implements ParserInterface
         }
 
         return ParsedResultRecord::from([
-            'data' => ['flags' => $flags],
+            'data' => ['nullable' => $nullables],
             'signature' => $newSignature,
             'query' => $newQuery,
         ]);
@@ -58,42 +83,6 @@ final class FlagParser implements ParserInterface
     {
         $errors = new StringTypedCollection;
         $suggestions = new StringTypedCollection;
-
-        $expectedFlags = [];
-        foreach ($signature as $element) {
-            if (str_starts_with($element, '--')) {
-                $expectedFlags[] = ltrim($element, '--');
-            }
-        }
-
-        $providedFlags = [];
-        foreach ($query as $element) {
-            if (str_starts_with($element, '--')) {
-                $flagName = ltrim($element, '--');
-
-                // Skip empty flag names
-                if (empty($flagName)) {
-                    continue;
-                }
-
-                $providedFlags[] = $flagName;
-
-                if (! in_array($flagName, $expectedFlags, true)) {
-                    $errors->add("Unknown flag: '{$element}'");
-                    $suggestions->add("Remove flag '{$element}' or add it to the signature as '{--{$flagName}}'");
-                }
-            }
-        }
-
-        // Check for duplicate flags
-        $seen = [];
-        foreach ($providedFlags as $flag) {
-            if (in_array($flag, $seen, true)) {
-                $errors->add("Duplicate flag: '--{$flag}'");
-                $suggestions->add("Remove duplicate flag '--{$flag}'");
-            }
-            $seen[] = $flag;
-        }
 
         return new ValidationResultRecord(
             isValid: $errors->isEmpty(),

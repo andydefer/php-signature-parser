@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace AndyDefer\SignatureParser\ValueObjects;
 
 use AndyDefer\DomainStructures\Abstracts\AbstractValueObject;
+use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 use AndyDefer\DomainStructures\Utils\StrictDataObject;
+use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 use AndyDefer\SignatureParser\SignatureParser;
 use InvalidArgumentException;
 
@@ -16,20 +18,12 @@ use InvalidArgumentException;
  * - Source (command name)
  * - Required arguments
  * - Default arguments
+ * - Nullable arguments
  * - Variadic arguments
  * - Boolean flags
  *
- *
- * @example
- * $vo = new SignatureVO(
- *     'backup {source} {destination} {format=zip} {--force}',
- *     'backup /var/www /backup tar.gz --force'
- * );
- *
- * echo $vo->getSource();              // 'backup'
- * echo $vo->getRequired('source');    // '/var/www'
- * echo $vo->getDefault('format');     // 'tar.gz'
- * echo $vo->getFlag('force');         // true
+ * Additionally, this VO validates the query against the signature and provides
+ * validation results including errors and suggestions.
  */
 final class SignatureVO extends AbstractValueObject
 {
@@ -44,6 +38,11 @@ final class SignatureVO extends AbstractValueObject
     private array $default = [];
 
     /**
+     * @var array<string, string|null> Nullable arguments (name => value)
+     */
+    private array $nullable = [];
+
+    /**
      * @var array<string, array<string>> Variadic arguments (name => array of values)
      */
     private array $variadic = [];
@@ -55,8 +54,13 @@ final class SignatureVO extends AbstractValueObject
 
     private StrictDataObject $parsed;
 
+    private ValidationResultRecord $validationResult;
+
     /**
      * Constructs a new SignatureVO instance.
+     *
+     * The constructor parses the signature and query, then validates the query
+     * against the signature. Use isValid() to check if the query is valid.
      *
      * @param  string  $signature  The command signature (e.g., 'backup {source} {--force}')
      * @param  string  $query  The actual command query (e.g., 'backup /var/www --force')
@@ -76,6 +80,7 @@ final class SignatureVO extends AbstractValueObject
         }
 
         $this->parse();
+        $this->validate();
     }
 
     /**
@@ -126,6 +131,27 @@ final class SignatureVO extends AbstractValueObject
     public function getDefaults(): array
     {
         return $this->default;
+    }
+
+    /**
+     * Returns the value of a nullable argument by name.
+     *
+     * @param  string  $name  The argument name
+     * @return string|null The value or null if not found
+     */
+    public function getNullable(string $name): ?string
+    {
+        return $this->nullable[$name] ?? null;
+    }
+
+    /**
+     * Returns all nullable arguments.
+     *
+     * @return array<string, string|null> Associative array of argument names to values
+     */
+    public function getNullables(): array
+    {
+        return $this->nullable;
     }
 
     /**
@@ -212,6 +238,17 @@ final class SignatureVO extends AbstractValueObject
     }
 
     /**
+     * Checks if a nullable argument exists.
+     *
+     * @param  string  $name  The argument name
+     * @return bool True if the argument exists, false otherwise
+     */
+    public function hasNullable(string $name): bool
+    {
+        return isset($this->nullable[$name]);
+    }
+
+    /**
      * Checks if a variadic argument exists.
      *
      * @param  string  $name  The argument name
@@ -220,6 +257,46 @@ final class SignatureVO extends AbstractValueObject
     public function hasVariadic(string $name): bool
     {
         return isset($this->variadic[$name]);
+    }
+
+    /**
+     * Returns whether the query is valid against the signature.
+     *
+     * @return bool True if valid, false otherwise
+     */
+    public function isValid(): bool
+    {
+        return $this->validationResult->isValid;
+    }
+
+    /**
+     * Returns validation errors if the query is invalid.
+     *
+     * @return StringTypedCollection List of validation error messages
+     */
+    public function getValidationErrors(): StringTypedCollection
+    {
+        return $this->validationResult->errors;
+    }
+
+    /**
+     * Returns validation suggestions for fixing errors.
+     *
+     * @return StringTypedCollection List of suggestions
+     */
+    public function getValidationSuggestions(): StringTypedCollection
+    {
+        return $this->validationResult->suggestions;
+    }
+
+    /**
+     * Returns the validation result as an object.
+     *
+     * @return ValidationResultRecord The validation result
+     */
+    public function getValidationResult(): ValidationResultRecord
+    {
+        return $this->validationResult;
     }
 
     /**
@@ -263,6 +340,11 @@ final class SignatureVO extends AbstractValueObject
             $this->default[$arg->name] = $arg->value;
         }
 
+        $this->nullable = [];
+        foreach ($result->nullable as $arg) {
+            $this->nullable[$arg->name] = $arg->value;
+        }
+
         $this->variadic = [];
         foreach ($result->variadic as $arg) {
             $this->variadic[$arg->name] = $arg->values->toArray();
@@ -277,9 +359,19 @@ final class SignatureVO extends AbstractValueObject
             'source' => $this->source,
             'required' => $this->required,
             'default' => $this->default,
+            'nullable' => $this->nullable,
             'variadic' => $this->variadic,
             'flags' => $this->flags,
         ]);
+    }
+
+    /**
+     * Validates the query against the signature.
+     */
+    private function validate(): void
+    {
+        $parser = new SignatureParser;
+        $this->validationResult = $parser->validate($this->signature, $this->query);
     }
 
     private string $source;

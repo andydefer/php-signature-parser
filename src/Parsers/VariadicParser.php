@@ -4,25 +4,18 @@ declare(strict_types=1);
 
 namespace AndyDefer\SignatureParser\Parsers;
 
+use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
+use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 
-/**
- * Parses variadic arguments from a command signature.
- *
- * Variadic arguments are defined with `*` suffix and capture multiple values
- * from the query.
- */
 final class VariadicParser implements ParserInterface
 {
-    /**
-     * {@inheritDoc}
-     */
     public function parse(array $signature, array $query): ParsedResultRecord
     {
         $variadic = [];
-        $remainingSignature = [];
-        $remainingQuery = [];
+        $newSignature = [];
+        $newQuery = [];
         $queryIndex = 0;
         $queryCount = count($query);
 
@@ -58,23 +51,80 @@ final class VariadicParser implements ParserInterface
 
                 $variadic[$name] = $values;
             } else {
-                $remainingSignature[] = $element;
+                $newSignature[] = $element;
                 if ($queryIndex < $queryCount) {
-                    $remainingQuery[] = $query[$queryIndex];
+                    $newQuery[] = $query[$queryIndex];
                     $queryIndex++;
                 }
             }
         }
 
         while ($queryIndex < $queryCount) {
-            $remainingQuery[] = $query[$queryIndex];
+            $newQuery[] = $query[$queryIndex];
             $queryIndex++;
         }
 
         return ParsedResultRecord::from([
             'data' => ['variadic' => $variadic],
-            'signature' => $remainingSignature,
-            'query' => $remainingQuery,
+            'signature' => $newSignature,
+            'query' => $newQuery,
         ]);
+    }
+
+    public function validate(array $signature, array $query): ValidationResultRecord
+    {
+        $errors = new StringTypedCollection;
+        $suggestions = new StringTypedCollection;
+
+        $variadicNames = [];
+        foreach ($signature as $element) {
+            if (str_contains($element, '*')) {
+                $variadicNames[] = str_replace('*', '', $element);
+            }
+        }
+
+        $hasVariadic = ! empty($variadicNames);
+        $hasVariadicInQuery = false;
+
+        foreach ($query as $element) {
+            if (str_starts_with($element, '[') && str_ends_with($element, ']')) {
+                $hasVariadicInQuery = true;
+                break;
+            }
+        }
+
+        if ($hasVariadicInQuery && ! $hasVariadic) {
+            $errors->add('Variadic argument provided but not defined in signature');
+            $suggestions->add('Add a variadic argument (*) to the signature');
+        }
+
+        if ($hasVariadic && ! $hasVariadicInQuery) {
+            $suggestions->add('Variadic argument is defined but not used. Use [value1, value2] format');
+        }
+
+        // Validate variadic format
+        foreach ($query as $element) {
+            if (str_starts_with($element, '[') && str_ends_with($element, ']')) {
+                $content = trim($element, '[]');
+
+                if (! empty($content)) {
+                    $parts = array_map('trim', explode(',', $content));
+
+                    foreach ($parts as $part) {
+                        if (empty($part)) {
+                            $errors->add('Empty value in variadic argument');
+                            $suggestions->add('Remove empty values from the variadic list');
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        return new ValidationResultRecord(
+            isValid: $errors->isEmpty(),
+            errors: $errors,
+            suggestions: $suggestions
+        );
     }
 }

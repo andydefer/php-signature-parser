@@ -16,6 +16,8 @@ final class SourceParserTest extends TestCase
         $this->parser = new SourceParser;
     }
 
+    // ==================== PARSE TESTS ====================
+
     public function test_extracts_source_from_signature_and_query(): void
     {
         $signature = ['backup', 'source', 'destination'];
@@ -37,8 +39,6 @@ final class SourceParserTest extends TestCase
 
         $this->assertSame('', $result->data->source);
         $this->assertSame([], $result->signature->toArray());
-        // La requête n'ayant pas de signature pour lui donner un sens,
-        // le parser retire le premier élément qui aurait dû être la source
         $this->assertSame(['/var/www'], $result->query->toArray());
     }
 
@@ -52,5 +52,57 @@ final class SourceParserTest extends TestCase
         $this->assertSame('git', $result->data->source);
         $this->assertSame(['commit', '--all'], $result->signature->toArray());
         $this->assertSame(['commit', '--all'], $result->query->toArray());
+    }
+
+    // ==================== VALIDATION TESTS ====================
+
+    public function test_validation_passes_with_valid_signature_and_query(): void
+    {
+        $signature = ['backup', 'source'];
+        $query = ['backup', '/var/www'];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertCount(0, $result->errors);
+        $this->assertCount(0, $result->suggestions);
+    }
+
+    public function test_validation_fails_for_empty_signature(): void
+    {
+        $signature = [];
+        $query = ['backup'];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('Missing source', $result->errors->first());
+        $this->assertStringContainsString('Add a command name', $result->suggestions->first());
+    }
+
+    public function test_validation_fails_for_empty_query(): void
+    {
+        $signature = ['backup'];
+        $query = [];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(1, $result->errors);
+        $this->assertStringContainsString('Missing query', $result->errors->first());
+        $this->assertStringContainsString('Provide a query', $result->suggestions->first());
+    }
+
+    public function test_validation_fails_for_empty_both(): void
+    {
+        $signature = [];
+        $query = [];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertCount(2, $result->errors);
+        $this->assertCount(2, $result->suggestions);
     }
 }

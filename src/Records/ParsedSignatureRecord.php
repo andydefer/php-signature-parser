@@ -18,6 +18,7 @@ final class ParsedSignatureRecord extends AbstractRecord
         public readonly string $source,
         public readonly ArgumentCollection $required,
         public readonly ArgumentCollection $default,
+        public readonly ArgumentCollection $nullable,
         public readonly VariadicArgumentCollection $variadic,
         public readonly FlagCollection $flags,
     ) {}

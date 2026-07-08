@@ -9,46 +9,74 @@ use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 
-final class FlagParser implements ParserInterface
+/**
+ * Parses default value arguments from a command signature.
+ *
+ * Handles syntax: {name=value}
+ */
+final class DefaultParser implements ParserInterface
 {
     public function parse(array $signature, array $query): ParsedResultRecord
     {
-        $flags = [];
+        $defaults = [];
         $newSignature = [];
         $newQuery = [];
         $queryIndex = 0;
         $queryCount = count($query);
 
         foreach ($signature as $element) {
-            if (str_starts_with($element, '--')) {
-                $name = ltrim($element, '--');
+            if (str_contains($element, '=')) {
+                [$name, $defaultValue] = explode('=', $element, 2);
+
+                // {name=} avec valeur vide est interdit
+                if ($defaultValue === '') {
+                    throw new \InvalidArgumentException(
+                        "Default argument '{$name}' cannot have empty value. Use '?' for nullable instead."
+                    );
+                }
+
+                $value = $defaultValue;
                 $found = false;
 
                 for ($i = $queryIndex; $i < $queryCount; $i++) {
-                    if ($query[$i] === $element) {
+                    $current = $query[$i];
+
+                    if (str_starts_with($current, '[') || str_starts_with($current, '--')) {
+                        break;
+                    }
+
+                    if (! empty($current) && ! str_starts_with($current, '[') && ! str_starts_with($current, '--')) {
+                        $value = $current;
                         $found = true;
                         $queryIndex = $i + 1;
                         break;
                     }
                 }
 
-                $flags[$name] = $found;
+                if ($found) {
+                    $defaults[$name] = $value;
+                } else {
+                    $defaults[$name] = $defaultValue;
+                }
             } else {
                 $newSignature[] = $element;
                 if ($queryIndex < $queryCount) {
                     $newQuery[] = $query[$queryIndex];
                     $queryIndex++;
+                } else {
+                    $newQuery[] = '';
                 }
             }
         }
 
+        // Ajouter le reste de la query
         while ($queryIndex < $queryCount) {
             $newQuery[] = $query[$queryIndex];
             $queryIndex++;
         }
 
         return ParsedResultRecord::from([
-            'data' => ['flags' => $flags],
+            'data' => ['default' => $defaults],
             'signature' => $newSignature,
             'query' => $newQuery,
         ]);
@@ -59,40 +87,15 @@ final class FlagParser implements ParserInterface
         $errors = new StringTypedCollection;
         $suggestions = new StringTypedCollection;
 
-        $expectedFlags = [];
         foreach ($signature as $element) {
-            if (str_starts_with($element, '--')) {
-                $expectedFlags[] = ltrim($element, '--');
-            }
-        }
+            if (str_contains($element, '=')) {
+                [$name, $defaultValue] = explode('=', $element, 2);
 
-        $providedFlags = [];
-        foreach ($query as $element) {
-            if (str_starts_with($element, '--')) {
-                $flagName = ltrim($element, '--');
-
-                // Skip empty flag names
-                if (empty($flagName)) {
-                    continue;
-                }
-
-                $providedFlags[] = $flagName;
-
-                if (! in_array($flagName, $expectedFlags, true)) {
-                    $errors->add("Unknown flag: '{$element}'");
-                    $suggestions->add("Remove flag '{$element}' or add it to the signature as '{--{$flagName}}'");
+                if ($defaultValue === '') {
+                    $errors->add("Default argument '{$name}' has empty value");
+                    $suggestions->add("Use '?' for nullable instead of '='");
                 }
             }
-        }
-
-        // Check for duplicate flags
-        $seen = [];
-        foreach ($providedFlags as $flag) {
-            if (in_array($flag, $seen, true)) {
-                $errors->add("Duplicate flag: '--{$flag}'");
-                $suggestions->add("Remove duplicate flag '--{$flag}'");
-            }
-            $seen[] = $flag;
         }
 
         return new ValidationResultRecord(
