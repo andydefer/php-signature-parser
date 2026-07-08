@@ -1,9 +1,8 @@
-```markdown
 # SignatureStructureVO - Référence Technique
 
 ## Description
 
-Value Object qui analyse la structure d'une signature de commande CLI **sans** nécessiter de requête. Extrait le nom de la commande, les arguments requis, les arguments par défaut, les variadiques et les flags (options booléennes).
+Value Object qui analyse la structure d'une signature de commande CLI **sans** nécessiter de requête. Extrait le nom de la commande, les arguments requis, les arguments par défaut, les arguments nullables, les variadiques et les flags booléens.
 
 ## Hiérarchie
 
@@ -22,8 +21,8 @@ AbstractValueObject
 |---------|-------------|---------|
 | `{name}` | Argument requis | `{source}` |
 | `{name=value}` | Argument avec valeur par défaut | `{format=zip}` |
-| `{name=}` | Argument avec valeur par défaut vide | `{format=}` |
-| `{name?}` | Argument nullable (peut être null) | `{format?}` |
+| `{name=}` | Argument avec valeur par défaut vide (ignoré) | `{format=}` |
+| `{name?}` | Argument nullable | `{format?}` |
 | `{name*}` | Argument variadique | `{files*}` |
 | `{--flag}` | Flag booléen | `{--force}` |
 
@@ -97,6 +96,19 @@ $defaults = $vo->getDefaults(); // ['format' => 'zip', 'output' => 'dist']
 
 ---
 
+### `getNullables(): array`
+
+Retourne la liste des arguments nullables.
+
+**Retourne :** `array<string>` - Liste des noms d'arguments nullables
+
+**Exemple :**
+```php
+$nullables = $vo->getNullables(); // ['env', 'port']
+```
+
+---
+
 ### `getVariadics(): array`
 
 Retourne la liste des arguments variadiques.
@@ -106,8 +118,6 @@ Retourne la liste des arguments variadiques.
 **Exemple :**
 ```php
 $variadics = $vo->getVariadics(); // ['excludes']
-```
-
 ---
 
 ### `getFlags(): array`
@@ -158,6 +168,24 @@ $vo->hasDefault('format'); // true
 
 ---
 
+### `hasNullable(string $name): bool`
+
+Vérifie si un argument nullable existe.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'argument à vérifier |
+
+**Retourne :** `bool`
+
+**Exemple :**
+```php
+$vo->hasNullable('env'); // true
+$vo->hasNullable('unknown'); // false
+```
+
+---
+
 ### `hasVariadic(string $name): bool`
 
 Vérifie si un argument variadique existe.
@@ -196,7 +224,7 @@ $vo->hasFlag('force'); // true
 
 Compte le nombre total d'arguments (hors source et flags).
 
-**Retourne :** `int` - Nombre total d'arguments
+**Retourne :** `int` - Nombre total d'arguments (requis + defaults + nullables + variadics)
 
 **Exemple :**
 ```php
@@ -234,6 +262,14 @@ Vérifie s'il y a des arguments par défaut.
 
 ---
 
+### `hasNullables(): bool`
+
+Vérifie s'il y a des arguments nullables.
+
+**Retourne :** `bool`
+
+---
+
 ### `hasVariadics(): bool`
 
 Vérifie s'il y a des arguments variadiques.
@@ -262,6 +298,7 @@ $structure = $vo->getValue();
 echo $structure->source;        // 'backup'
 echo $structure->required[0];   // 'source'
 echo $structure->default->format; // 'zip'
+echo $structure->nullable[0];   // 'env'
 echo $structure->variadic[0];   // 'excludes'
 echo $structure->flags[0];      // 'force'
 ```
@@ -290,11 +327,12 @@ $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excl
 echo "Source: " . $vo->getSource() . "\n";
 echo "Arguments requis: " . implode(', ', $vo->getRequireds()) . "\n";
 echo "Arguments par défaut: " . print_r($vo->getDefaults(), true) . "\n";
+echo "Arguments nullables: " . implode(', ', $vo->getNullables()) . "\n";
 echo "Arguments variadiques: " . implode(', ', $vo->getVariadics()) . "\n";
 echo "Flags: " . implode(', ', $vo->getFlags()) . "\n";
 ```
 
-### Cas 2 : Validation de signature
+### Cas 2 : Validation de structure de signature
 
 ```php
 $vo = new SignatureStructureVO('deploy {env=production} {--force}');
@@ -308,6 +346,10 @@ if ($vo->hasDefaults()) {
     foreach ($vo->getDefaults() as $name => $value) {
         echo "  - $name: $value\n";
     }
+}
+
+if ($vo->hasNullables()) {
+    echo "Arguments nullables: " . implode(', ', $vo->getNullables()) . "\n";
 }
 
 if ($vo->hasFlags()) {
@@ -336,6 +378,14 @@ function generateCommandDoc(string $signature): string
         $doc .= "**Arguments par défaut:**\n";
         foreach ($vo->getDefaults() as $name => $value) {
             $doc .= "- `$name`: $value\n";
+        }
+        $doc .= "\n";
+    }
+    
+    if ($vo->hasNullables()) {
+        $doc .= "**Arguments nullables:**\n";
+        foreach ($vo->getNullables() as $arg) {
+            $doc .= "- `$arg`\n";
         }
         $doc .= "\n";
     }
@@ -389,7 +439,7 @@ Parcours des éléments
     ├── --flag → flags
     ├── * → variadic
     ├── = → default (name => value)
-    ├── ? → nullable (ignoré)
+    ├── ? → nullable
     └── other → required
     ↓
 Structure interne
@@ -410,7 +460,6 @@ getValue() / méthodes accesseurs
 ```php
 $parser = new SignatureParser();
 $elements = $parser->extractSignatureElements($signature);
-// Les éléments sont ensuite analysés par SignatureStructureVO
 ```
 
 ### Avec StrictDataObject
@@ -420,6 +469,8 @@ $structure = $vo->getValue();
 $source = $structure->source;
 $requireds = $structure->required->toArray();
 $defaults = $structure->default->toArray();
+$nullables = $structure->nullable->toArray();
+$variadics = $structure->variadic->toArray();
 $flags = $structure->flags->toArray();
 ```
 
@@ -431,10 +482,12 @@ $flags = $structure->flags->toArray();
 | `getSource()` | O(1) | Accès direct |
 | `getRequireds()` | O(1) | Accès direct |
 | `getDefaults()` | O(1) | Accès direct |
+| `getNullables()` | O(1) | Accès direct |
 | `getVariadics()` | O(1) | Accès direct |
 | `getFlags()` | O(1) | Accès direct |
 | `hasRequired()` | O(n) | Recherche dans le tableau |
 | `hasDefault()` | O(1) | Recherche dans le tableau associatif |
+| `hasNullable()` | O(n) | Recherche dans le tableau |
 | `hasVariadic()` | O(n) | Recherche dans le tableau |
 | `hasFlag()` | O(n) | Recherche dans le tableau |
 
@@ -456,21 +509,29 @@ declare(strict_types=1);
 
 use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 
-$signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {--force} {--verbose}';
+$signature = 'backup {source} {destination} {format=zip} {output=dist} {env?} {excludes*} {--force} {--verbose}';
 $vo = new SignatureStructureVO($signature);
 
 echo "Source: " . $vo->getSource() . "\n";
 echo "Raw: " . $vo->getRaw() . "\n";
-echo "Arguments: " . $vo->countArguments() . "\n";
+echo "Total arguments: " . $vo->countArguments() . "\n";
+
+echo "Requireds: " . implode(', ', $vo->getRequireds()) . "\n";
+echo "Defaults: " . print_r($vo->getDefaults(), true) . "\n";
+echo "Nullables: " . implode(', ', $vo->getNullables()) . "\n";
+echo "Variadics: " . implode(', ', $vo->getVariadics()) . "\n";
+echo "Flags: " . implode(', ', $vo->getFlags()) . "\n";
 
 echo "Has requireds? " . ($vo->hasRequireds() ? 'Yes' : 'No') . "\n";
 echo "Has defaults? " . ($vo->hasDefaults() ? 'Yes' : 'No') . "\n";
+echo "Has nullables? " . ($vo->hasNullables() ? 'Yes' : 'No') . "\n";
 echo "Has variadics? " . ($vo->hasVariadics() ? 'Yes' : 'No') . "\n";
 echo "Has flags? " . ($vo->hasFlags() ? 'Yes' : 'No') . "\n";
 
 echo "Has 'source' required? " . ($vo->hasRequired('source') ? 'Yes' : 'No') . "\n";
 echo "Has 'format' default? " . ($vo->hasDefault('format') ? 'Yes' : 'No') . "\n";
 echo "Default value for 'format': " . ($vo->hasDefault('format') ? $vo->getDefaults()['format'] : 'N/A') . "\n";
+echo "Has 'env' nullable? " . ($vo->hasNullable('env') ? 'Yes' : 'No') . "\n";
 echo "Has 'force' flag? " . ($vo->hasFlag('force') ? 'Yes' : 'No') . "\n";
 
 $structure = $vo->getValue();
@@ -486,4 +547,4 @@ echo "Equal? " . ($vo->equals($vo2) ? 'Yes' : 'No') . "\n";
 - `SignatureParser` - Parseur principal
 - `ParsedSignatureRecord` - Structure de données retournée
 - `StrictDataObject` - DataObject pour l'accès typé
-```
+---

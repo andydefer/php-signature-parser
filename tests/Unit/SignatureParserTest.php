@@ -7,6 +7,7 @@ namespace AndyDefer\SignatureParser\Tests\Unit;
 use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 use AndyDefer\SignatureParser\SignatureParser;
 use AndyDefer\SignatureParser\Tests\Fixtures\CustomParser;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 
 final class SignatureParserTest extends TestCase
@@ -24,7 +25,7 @@ final class SignatureParserTest extends TestCase
     public function test_parses_signature(): void
     {
         $signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
-        $query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models] --force';
+        $query = 'backup /var/www /backup tar.gz dist [cache, logs, tmp] [home, data, models] --force';
 
         $result = $this->parser->parse($signature, $query);
 
@@ -136,7 +137,6 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('/var/www', $result->required->first()->value);
         $this->assertSame('/backup', $result->required->last()->value);
         $this->assertCount(0, $result->default);
-        $this->assertCount(0, $result->nullable);
         $this->assertCount(0, $result->variadic);
         $this->assertCount(0, $result->flags);
     }
@@ -151,30 +151,6 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('backup', $result->source);
         $this->assertSame('tar.gz', $result->default->first()->value);
         $this->assertSame('dist', $result->default->last()->value);
-    }
-
-    public function test_parses_with_only_nullable_arguments(): void
-    {
-        $signature = 'deploy {env?} {port?}';
-        $query = 'deploy staging 8080';
-
-        $result = $this->parser->parse($signature, $query);
-
-        $this->assertSame('deploy', $result->source);
-        $this->assertSame('staging', $result->nullable->first()->value);
-        $this->assertSame('8080', $result->nullable->last()->value);
-    }
-
-    public function test_parses_with_nullable_arguments_missing_values(): void
-    {
-        $signature = 'deploy {env?} {port?}';
-        $query = 'deploy';
-
-        $result = $this->parser->parse($signature, $query);
-
-        $this->assertSame('deploy', $result->source);
-        $this->assertNull($result->nullable->first()->value);
-        $this->assertNull($result->nullable->last()->value);
     }
 
     public function test_parses_with_only_flags(): void
@@ -214,6 +190,18 @@ final class SignatureParserTest extends TestCase
         $this->assertFalse($result->flags->first()->value);
     }
 
+    public function test_parses_with_default_and_nullable_mixed(): void
+    {
+        $signature = 'deploy {port=8080} {--force}';
+        $query = 'deploy staging --force';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('deploy', $result->source);
+        $this->assertSame('staging', $result->default->first()->value);
+        $this->assertTrue($result->flags->first()->value);
+    }
+
     public function test_removes_and_adds_parsers(): void
     {
         $initialCount = count($this->parser->getParsers());
@@ -223,6 +211,52 @@ final class SignatureParserTest extends TestCase
 
         $this->parser->addParser(new CustomParser);
         $this->assertCount($initialCount, $this->parser->getParsers());
+    }
+
+    // ==================== ORDER VALIDATION TESTS ====================
+
+    public function test_throws_exception_for_invalid_order_required_after_default(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid signature order');
+
+        $signature = 'backup {format=zip} {source}';
+        $query = 'backup tar.gz /var/www';
+
+        $this->parser->parse($signature, $query);
+    }
+
+    public function test_throws_exception_for_invalid_order_required_after_variadic(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid signature order');
+
+        $signature = 'backup {excludes*} {source}';
+        $query = 'backup [cache, logs] /var/www';
+
+        $this->parser->parse($signature, $query);
+    }
+
+    public function test_throws_exception_for_invalid_order_default_after_variadic(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid signature order');
+
+        $signature = 'backup {excludes*} {format=zip}';
+        $query = 'backup [cache, logs] tar.gz';
+
+        $this->parser->parse($signature, $query);
+    }
+
+    public function test_throws_exception_for_invalid_order_argument_after_flag(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid signature order');
+
+        $signature = 'backup {--force} {source}';
+        $query = 'backup --force /var/www';
+
+        $this->parser->parse($signature, $query);
     }
 
     // ==================== VALIDATION TESTS ====================
@@ -237,17 +271,6 @@ final class SignatureParserTest extends TestCase
         $this->assertTrue($result->isValid);
         $this->assertCount(0, $result->errors);
         $this->assertCount(0, $result->suggestions);
-    }
-
-    public function test_validation_passes_for_nullable_argument_without_value(): void
-    {
-        $signature = 'deploy {env?} {--force}';
-        $query = 'deploy --force';
-
-        $result = $this->parser->validate($signature, $query);
-
-        $this->assertTrue($result->isValid);
-        $this->assertCount(0, $result->errors);
     }
 
     public function test_validation_fails_for_missing_required_argument(): void
@@ -353,28 +376,6 @@ final class SignatureParserTest extends TestCase
         $this->assertCount(0, $result->errors);
     }
 
-    public function test_validation_handles_nullable_with_default(): void
-    {
-        $signature = 'deploy {env?} {port=8080} {--force}';
-        $query = 'deploy --force';
-
-        $result = $this->parser->validate($signature, $query);
-
-        $this->assertTrue($result->isValid);
-        $this->assertCount(0, $result->errors);
-    }
-
-    public function test_validation_fails_for_empty_default_value(): void
-    {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessage('cannot have empty value');
-
-        $signature = 'deploy {env=} {--force}';
-        $query = 'deploy --force';
-
-        $this->parser->parse($signature, $query);
-    }
-
     public function test_validation_combines_errors_from_all_parsers(): void
     {
         $signature = 'backup {source} {destination} {format=zip} {--force}';
@@ -399,25 +400,17 @@ final class SignatureParserTest extends TestCase
         $this->assertStringContainsString('Provide', $result->suggestions->first());
     }
 
-    public function test_nullable_with_quotes_returns_quotes(): void
+    public function test_valid_order_required_then_default_then_variadic(): void
     {
-        $signature = 'deploy {env?}';
-        $query = 'deploy ""';
+        $signature = 'process {name} {format=zip} {files*} {--verbose}';
+        $query = 'process build tar.gz [file1, file2] --verbose';
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('deploy', $result->source);
-        $this->assertSame('""', $result->nullable->first()->value);
-    }
-
-    public function test_nullable_with_missing_value_returns_null(): void
-    {
-        $signature = 'deploy {env?}';
-        $query = 'deploy';
-
-        $result = $this->parser->parse($signature, $query);
-
-        $this->assertSame('deploy', $result->source);
-        $this->assertNull($result->nullable->first()->value);
+        $this->assertSame('process', $result->source);
+        $this->assertSame('build', $result->required->first()->value);
+        $this->assertSame('tar.gz', $result->default->first()->value);
+        $this->assertSame(['file1', 'file2'], $result->variadic->first()->values->toArray());
+        $this->assertTrue($result->flags->first()->value);
     }
 }

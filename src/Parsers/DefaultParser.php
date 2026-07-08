@@ -10,28 +10,61 @@ use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 
 /**
- * Parses default value arguments from a command signature.
+ * Parses default and nullable arguments from a command signature.
  *
- * Handles syntax: {name=value}
+ * Handles:
+ * - `{name=value}`: Default value when no query value is provided
+ * - `{name=?}`: Nullable argument (implicitly null)
+ * - `~`: Skip argument, use default value or null
+ *
+ * Invalid syntaxes:
+ * - `{name?}`: Invalid (throws exception)
+ * - `{name=}`: Invalid (throws exception)
  */
 final class DefaultParser implements ParserInterface
 {
+    private const SKIP_TOKEN = '~';
+
     public function parse(array $signature, array $query): ParsedResultRecord
     {
         $defaults = [];
+        $nullables = [];
         $newSignature = [];
         $newQuery = [];
         $queryIndex = 0;
         $queryCount = count($query);
 
         foreach ($signature as $element) {
-            if (str_contains($element, '=')) {
-                [$name, $defaultValue] = explode('=', $element, 2);
+            $isDefault = str_contains($element, '=');
+            $isNullable = str_ends_with($element, '?');
 
-                // {name=} avec valeur vide est interdit
-                if ($defaultValue === '') {
+            if ($isDefault || $isNullable) {
+                $name = $element;
+                $defaultValue = null;
+                $isNullableArg = false;
+
+                if ($isDefault) {
+                    [$name, $defaultValue] = explode('=', $element, 2);
+
+                    // {name=} → invalide
+                    if ($defaultValue === '') {
+                        throw new \InvalidArgumentException(
+                            "Default argument '{$name}' cannot have empty value. Use '{$name}=?' for nullable instead."
+                        );
+                    }
+
+                    // {name=?} → nullable
+                    if ($defaultValue === '?') {
+                        $isNullableArg = true;
+                        $nullables[$name] = null;
+
+                        continue;
+                    }
+                } elseif ($isNullable) {
+                    // {name?} → invalide
+                    $nameWithoutQuestion = rtrim($element, '?');
                     throw new \InvalidArgumentException(
-                        "Default argument '{$name}' cannot have empty value. Use '?' for nullable instead."
+                        "Invalid syntax '{$element}'. Use '{$nameWithoutQuestion}=?' for nullable instead."
                     );
                 }
 
@@ -45,6 +78,17 @@ final class DefaultParser implements ParserInterface
                         break;
                     }
 
+                    // Si on trouve ~, on saute et on garde la valeur par défaut
+                    if ($current === self::SKIP_TOKEN) {
+                        $found = true;
+                        $queryIndex = $i + 1;
+                        // Si c'est nullable et qu'on a ~, on garde null
+                        if ($isNullableArg) {
+                            $nullables[$name] = null;
+                        }
+                        break;
+                    }
+
                     if (! empty($current) && ! str_starts_with($current, '[') && ! str_starts_with($current, '--')) {
                         $value = $current;
                         $found = true;
@@ -54,9 +98,19 @@ final class DefaultParser implements ParserInterface
                 }
 
                 if ($found) {
-                    $defaults[$name] = $value;
+                    // Si c'est nullable, on met la valeur dans nullable
+                    if ($isNullableArg) {
+                        $nullables[$name] = $value;
+                    } else {
+                        $defaults[$name] = $value;
+                    }
                 } else {
-                    $defaults[$name] = $defaultValue;
+                    // Si c'est nullable et qu'aucune valeur n'est fournie, on garde null
+                    if ($isNullableArg) {
+                        $nullables[$name] = null;
+                    } else {
+                        $defaults[$name] = $defaultValue;
+                    }
                 }
             } else {
                 $newSignature[] = $element;
@@ -69,14 +123,16 @@ final class DefaultParser implements ParserInterface
             }
         }
 
-        // Ajouter le reste de la query
         while ($queryIndex < $queryCount) {
             $newQuery[] = $query[$queryIndex];
             $queryIndex++;
         }
 
         return ParsedResultRecord::from([
-            'data' => ['default' => $defaults],
+            'data' => [
+                'default' => $defaults,
+                'nullable' => $nullables,
+            ],
             'signature' => $newSignature,
             'query' => $newQuery,
         ]);
@@ -93,8 +149,14 @@ final class DefaultParser implements ParserInterface
 
                 if ($defaultValue === '') {
                     $errors->add("Default argument '{$name}' has empty value");
-                    $suggestions->add("Use '?' for nullable instead of '='");
+                    $suggestions->add("Use '{$name}=?' for nullable instead of '{$name}='");
                 }
+            }
+
+            if (str_ends_with($element, '?')) {
+                $name = rtrim($element, '?');
+                $errors->add("Invalid syntax '{$element}'");
+                $suggestions->add("Use '{$name}=?' for nullable instead");
             }
         }
 

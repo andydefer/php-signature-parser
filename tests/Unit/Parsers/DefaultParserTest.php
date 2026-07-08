@@ -180,6 +180,6 @@ final class DefaultParserTest extends TestCase
 
         $this->assertFalse($result->isValid);
         $suggestions = $result->suggestions->toArray();
-        $this->assertContains('Use \'?\' for nullable instead of \'=\'', $suggestions);
+        $this->assertContains("Use 'format=?' for nullable instead of 'format='", $suggestions);
     }
 }

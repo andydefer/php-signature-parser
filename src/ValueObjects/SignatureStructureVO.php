@@ -14,26 +14,38 @@ use InvalidArgumentException;
  *
  * This VO analyzes ONLY the signature (not the query) to provide
  * information about its structure: source, required arguments, default
- * arguments, variadics and flags.
+ * arguments, nullable arguments, variadics and flags.
  *
  * @example
  * $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excludes*} {--force}');
  * $vo->getRequireds(); // ['source', 'destination']
  * $vo->getDefaults(); // ['format' => 'zip']
+ * $vo->getNullables(); // []
  * $vo->getVariadics(); // ['excludes']
  * $vo->getFlags(); // ['force']
+ * @example
+ * $vo = new SignatureStructureVO('deploy {env?} {port?} {--force}');
+ * $vo->getNullables(); // ['env', 'port']
+ * $vo->getDefaults(); // []
  */
 final class SignatureStructureVO extends AbstractValueObject
 {
     private string $source;
 
-    private array $required;
+    /** @var array<string> */
+    private array $required = [];
 
-    private array $default;
+    /** @var array<string, string> */
+    private array $default = [];
 
-    private array $variadic;
+    /** @var array<string> */
+    private array $nullable = [];
 
-    private array $flags;
+    /** @var array<string> */
+    private array $variadic = [];
+
+    /** @var array<string> */
+    private array $flags = [];
 
     private string $raw;
 
@@ -50,36 +62,22 @@ final class SignatureStructureVO extends AbstractValueObject
         $parser = new SignatureParser;
         $elements = $parser->extractSignatureElements($signature);
 
-        // La source est toujours à la position 0
         $this->source = $elements[0] ?? '';
-
-        // Analyser les éléments restants
-        $this->required = [];
-        $this->default = [];
-        $this->variadic = [];
-        $this->flags = [];
 
         foreach ($elements as $index => $element) {
             if ($index === 0) {
-                continue; // Skip source
+                continue;
             }
 
             if (str_starts_with($element, '--')) {
                 $this->flags[] = ltrim($element, '--');
             } elseif (str_contains($element, '*')) {
                 $this->variadic[] = str_replace('*', '', $element);
-            } elseif (str_contains($element, '=') || str_ends_with($element, '?')) {
-                $name = $element;
-                $defaultValue = null;
-
-                if (str_contains($element, '=')) {
-                    [$name, $defaultValue] = explode('=', $element, 2);
-                    $defaultValue = $defaultValue === '' ? null : $defaultValue;
-                } elseif (str_ends_with($element, '?')) {
-                    $name = rtrim($element, '?');
-                }
-
-                if ($defaultValue !== null) {
+            } elseif (str_ends_with($element, '?')) {
+                $this->nullable[] = rtrim($element, '?');
+            } elseif (str_contains($element, '=')) {
+                [$name, $defaultValue] = explode('=', $element, 2);
+                if ($defaultValue !== '') {
                     $this->default[$name] = $defaultValue;
                 }
             } else {
@@ -91,6 +89,7 @@ final class SignatureStructureVO extends AbstractValueObject
             'source' => $this->source,
             'required' => $this->required,
             'default' => $this->default,
+            'nullable' => $this->nullable,
             'variadic' => $this->variadic,
             'flags' => $this->flags,
         ]);
@@ -101,21 +100,41 @@ final class SignatureStructureVO extends AbstractValueObject
         return $this->source;
     }
 
+    /**
+     * @return array<string>
+     */
     public function getRequireds(): array
     {
         return $this->required;
     }
 
+    /**
+     * @return array<string, string>
+     */
     public function getDefaults(): array
     {
         return $this->default;
     }
 
+    /**
+     * @return array<string>
+     */
+    public function getNullables(): array
+    {
+        return $this->nullable;
+    }
+
+    /**
+     * @return array<string>
+     */
     public function getVariadics(): array
     {
         return $this->variadic;
     }
 
+    /**
+     * @return array<string>
+     */
     public function getFlags(): array
     {
         return $this->flags;
@@ -131,6 +150,11 @@ final class SignatureStructureVO extends AbstractValueObject
         return isset($this->default[$name]);
     }
 
+    public function hasNullable(string $name): bool
+    {
+        return in_array($name, $this->nullable, true);
+    }
+
     public function hasVariadic(string $name): bool
     {
         return in_array($name, $this->variadic, true);
@@ -143,7 +167,7 @@ final class SignatureStructureVO extends AbstractValueObject
 
     public function countArguments(): int
     {
-        return count($this->required) + count($this->default) + count($this->variadic);
+        return count($this->required) + count($this->default) + count($this->nullable) + count($this->variadic);
     }
 
     public function getRaw(): string
@@ -159,6 +183,11 @@ final class SignatureStructureVO extends AbstractValueObject
     public function hasDefaults(): bool
     {
         return ! empty($this->default);
+    }
+
+    public function hasNullables(): bool
+    {
+        return ! empty($this->nullable);
     }
 
     public function hasVariadics(): bool

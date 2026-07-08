@@ -18,7 +18,6 @@ use InvalidArgumentException;
  * - Source (command name)
  * - Required arguments
  * - Default arguments
- * - Nullable arguments
  * - Variadic arguments
  * - Boolean flags
  *
@@ -36,11 +35,6 @@ final class SignatureVO extends AbstractValueObject
      * @var array<string, string|null> Default arguments (name => value)
      */
     private array $default = [];
-
-    /**
-     * @var array<string, string|null> Nullable arguments (name => value)
-     */
-    private array $nullable = [];
 
     /**
      * @var array<string, array<string>> Variadic arguments (name => array of values)
@@ -134,27 +128,6 @@ final class SignatureVO extends AbstractValueObject
     }
 
     /**
-     * Returns the value of a nullable argument by name.
-     *
-     * @param  string  $name  The argument name
-     * @return string|null The value or null if not found
-     */
-    public function getNullable(string $name): ?string
-    {
-        return $this->nullable[$name] ?? null;
-    }
-
-    /**
-     * Returns all nullable arguments.
-     *
-     * @return array<string, string|null> Associative array of argument names to values
-     */
-    public function getNullables(): array
-    {
-        return $this->nullable;
-    }
-
-    /**
      * Returns the values of a variadic argument by name.
      *
      * @param  string  $name  The argument name
@@ -235,17 +208,6 @@ final class SignatureVO extends AbstractValueObject
     public function hasDefault(string $name): bool
     {
         return isset($this->default[$name]);
-    }
-
-    /**
-     * Checks if a nullable argument exists.
-     *
-     * @param  string  $name  The argument name
-     * @return bool True if the argument exists, false otherwise
-     */
-    public function hasNullable(string $name): bool
-    {
-        return isset($this->nullable[$name]);
     }
 
     /**
@@ -340,11 +302,6 @@ final class SignatureVO extends AbstractValueObject
             $this->default[$arg->name] = $arg->value;
         }
 
-        $this->nullable = [];
-        foreach ($result->nullable as $arg) {
-            $this->nullable[$arg->name] = $arg->value;
-        }
-
         $this->variadic = [];
         foreach ($result->variadic as $arg) {
             $this->variadic[$arg->name] = $arg->values->toArray();
@@ -359,7 +316,6 @@ final class SignatureVO extends AbstractValueObject
             'source' => $this->source,
             'required' => $this->required,
             'default' => $this->default,
-            'nullable' => $this->nullable,
             'variadic' => $this->variadic,
             'flags' => $this->flags,
         ]);

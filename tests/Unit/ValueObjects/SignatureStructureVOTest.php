@@ -11,11 +11,15 @@ use PHPUnit\Framework\TestCase;
 
 final class SignatureStructureVOTest extends TestCase
 {
+    // ==================== SOURCE TESTS ====================
+
     public function test_get_source(): void
     {
         $vo = new SignatureStructureVO('backup {source} {destination}');
         $this->assertSame('backup', $vo->getSource());
     }
+
+    // ==================== REQUIRED ARGUMENTS TESTS ====================
 
     public function test_get_requireds(): void
     {
@@ -23,68 +27,11 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertEquals(['source', 'destination'], $vo->getRequireds());
     }
 
-    public function test_get_defaults(): void
-    {
-        $vo = new SignatureStructureVO('backup {format=zip} {output=dist}');
-        $this->assertEquals(['format' => 'zip', 'output' => 'dist'], $vo->getDefaults());
-    }
-
-    public function test_get_defaults_with_nullable(): void
-    {
-        $vo = new SignatureStructureVO('backup {format?}');
-        $this->assertEmpty($vo->getDefaults());
-    }
-
-    public function test_get_defaults_with_empty_default(): void
-    {
-        $vo = new SignatureStructureVO('backup {format=}');
-        $this->assertEmpty($vo->getDefaults());
-    }
-
-    public function test_get_variadics(): void
-    {
-        $vo = new SignatureStructureVO('backup {excludes*} {purpose*}');
-        $this->assertEquals(['excludes', 'purpose'], $vo->getVariadics());
-    }
-
-    public function test_get_flags(): void
-    {
-        $vo = new SignatureStructureVO('backup {--force} {--verbose}');
-        $this->assertEquals(['force', 'verbose'], $vo->getFlags());
-    }
-
     public function test_has_required(): void
     {
         $vo = new SignatureStructureVO('backup {source} {destination}');
         $this->assertTrue($vo->hasRequired('source'));
         $this->assertFalse($vo->hasRequired('nonexistent'));
-    }
-
-    public function test_has_default(): void
-    {
-        $vo = new SignatureStructureVO('backup {format=zip}');
-        $this->assertTrue($vo->hasDefault('format'));
-        $this->assertFalse($vo->hasDefault('nonexistent'));
-    }
-
-    public function test_has_variadic(): void
-    {
-        $vo = new SignatureStructureVO('backup {excludes*}');
-        $this->assertTrue($vo->hasVariadic('excludes'));
-        $this->assertFalse($vo->hasVariadic('nonexistent'));
-    }
-
-    public function test_has_flag(): void
-    {
-        $vo = new SignatureStructureVO('backup {--force}');
-        $this->assertTrue($vo->hasFlag('force'));
-        $this->assertFalse($vo->hasFlag('nonexistent'));
-    }
-
-    public function test_count_arguments(): void
-    {
-        $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excludes*}');
-        $this->assertEquals(4, $vo->countArguments());
     }
 
     public function test_has_requireds(): void
@@ -96,6 +43,27 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertFalse($vo2->hasRequireds());
     }
 
+    // ==================== DEFAULT ARGUMENTS TESTS ====================
+
+    public function test_get_defaults(): void
+    {
+        $vo = new SignatureStructureVO('backup {format=zip} {output=dist}');
+        $this->assertEquals(['format' => 'zip', 'output' => 'dist'], $vo->getDefaults());
+    }
+
+    public function test_get_defaults_with_empty_default(): void
+    {
+        $vo = new SignatureStructureVO('backup {format=}');
+        $this->assertEmpty($vo->getDefaults());
+    }
+
+    public function test_has_default(): void
+    {
+        $vo = new SignatureStructureVO('backup {format=zip}');
+        $this->assertTrue($vo->hasDefault('format'));
+        $this->assertFalse($vo->hasDefault('nonexistent'));
+    }
+
     public function test_has_defaults(): void
     {
         $vo1 = new SignatureStructureVO('backup {format=zip}');
@@ -103,6 +71,51 @@ final class SignatureStructureVOTest extends TestCase
 
         $vo2 = new SignatureStructureVO('backup {source}');
         $this->assertFalse($vo2->hasDefaults());
+    }
+
+    // ==================== NULLABLE ARGUMENTS TESTS ====================
+
+    public function test_get_nullables(): void
+    {
+        $vo = new SignatureStructureVO('deploy {env?} {port?}');
+        $this->assertEquals(['env', 'port'], $vo->getNullables());
+    }
+
+    public function test_get_nullables_with_empty(): void
+    {
+        $vo = new SignatureStructureVO('deploy {env}');
+        $this->assertEmpty($vo->getNullables());
+    }
+
+    public function test_has_nullable(): void
+    {
+        $vo = new SignatureStructureVO('deploy {env?}');
+        $this->assertTrue($vo->hasNullable('env'));
+        $this->assertFalse($vo->hasNullable('nonexistent'));
+    }
+
+    public function test_has_nullables(): void
+    {
+        $vo1 = new SignatureStructureVO('deploy {env?}');
+        $this->assertTrue($vo1->hasNullables());
+
+        $vo2 = new SignatureStructureVO('deploy {env}');
+        $this->assertFalse($vo2->hasNullables());
+    }
+
+    // ==================== VARIADIC ARGUMENTS TESTS ====================
+
+    public function test_get_variadics(): void
+    {
+        $vo = new SignatureStructureVO('backup {excludes*} {purpose*}');
+        $this->assertEquals(['excludes', 'purpose'], $vo->getVariadics());
+    }
+
+    public function test_has_variadic(): void
+    {
+        $vo = new SignatureStructureVO('backup {excludes*}');
+        $this->assertTrue($vo->hasVariadic('excludes'));
+        $this->assertFalse($vo->hasVariadic('nonexistent'));
     }
 
     public function test_has_variadics(): void
@@ -114,6 +127,21 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertFalse($vo2->hasVariadics());
     }
 
+    // ==================== FLAGS TESTS ====================
+
+    public function test_get_flags(): void
+    {
+        $vo = new SignatureStructureVO('backup {--force} {--verbose}');
+        $this->assertEquals(['force', 'verbose'], $vo->getFlags());
+    }
+
+    public function test_has_flag(): void
+    {
+        $vo = new SignatureStructureVO('backup {--force}');
+        $this->assertTrue($vo->hasFlag('force'));
+        $this->assertFalse($vo->hasFlag('nonexistent'));
+    }
+
     public function test_has_flags(): void
     {
         $vo1 = new SignatureStructureVO('backup {--force}');
@@ -123,9 +151,31 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertFalse($vo2->hasFlags());
     }
 
+    // ==================== COUNT ARGUMENTS TESTS ====================
+
+    public function test_count_arguments(): void
+    {
+        $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excludes*}');
+        $this->assertEquals(4, $vo->countArguments());
+    }
+
+    public function test_count_arguments_with_nullable(): void
+    {
+        $vo = new SignatureStructureVO('deploy {env?} {port?} {--force}');
+        $this->assertEquals(2, $vo->countArguments());
+    }
+
+    public function test_count_arguments_with_all_types(): void
+    {
+        $vo = new SignatureStructureVO('backup {source} {format=zip} {env?} {excludes*} {--force}');
+        $this->assertEquals(4, $vo->countArguments());
+    }
+
+    // ==================== VALUE STRUCTURE TESTS ====================
+
     public function test_get_value(): void
     {
-        $vo = new SignatureStructureVO('backup {source} {format=zip} {excludes*} {--force}');
+        $vo = new SignatureStructureVO('backup {source} {format=zip} {env?} {excludes*} {--force}');
 
         $value = $vo->getValue();
 
@@ -133,9 +183,12 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertEquals('backup', $value->source);
         $this->assertEquals(['source'], $value->required);
         $this->assertEquals(['format' => 'zip'], $value->default->toArray());
+        $this->assertEquals(['env'], $value->nullable);
         $this->assertEquals(['excludes'], $value->variadic);
         $this->assertEquals(['force'], $value->flags);
     }
+
+    // ==================== RAW & EQUALITY TESTS ====================
 
     public function test_get_raw(): void
     {
@@ -154,12 +207,16 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertFalse($vo1->equals($vo3));
     }
 
+    // ==================== EXCEPTION TESTS ====================
+
     public function test_throws_exception_for_empty_signature(): void
     {
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage('Signature cannot be empty');
         new SignatureStructureVO('');
     }
+
+    // ==================== COMPLEX SIGNATURE TESTS ====================
 
     public function test_signature_with_only_source(): void
     {
@@ -168,28 +225,32 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertSame('backup', $vo->getSource());
         $this->assertEmpty($vo->getRequireds());
         $this->assertEmpty($vo->getDefaults());
+        $this->assertEmpty($vo->getNullables());
         $this->assertEmpty($vo->getVariadics());
         $this->assertEmpty($vo->getFlags());
         $this->assertFalse($vo->hasRequireds());
         $this->assertFalse($vo->hasDefaults());
+        $this->assertFalse($vo->hasNullables());
         $this->assertFalse($vo->hasVariadics());
         $this->assertFalse($vo->hasFlags());
     }
 
     public function test_signature_with_all_types(): void
     {
-        $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}');
+        $vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {output=dist} {env?} {excludes*} {purpose*} {--force} {--verbose}');
 
         $this->assertSame('backup', $vo->getSource());
         $this->assertEquals(['source', 'destination'], $vo->getRequireds());
         $this->assertEquals(['format' => 'zip', 'output' => 'dist'], $vo->getDefaults());
+        $this->assertEquals(['env'], $vo->getNullables());
         $this->assertEquals(['excludes', 'purpose'], $vo->getVariadics());
         $this->assertEquals(['force', 'verbose'], $vo->getFlags());
         $this->assertTrue($vo->hasRequireds());
         $this->assertTrue($vo->hasDefaults());
+        $this->assertTrue($vo->hasNullables());
         $this->assertTrue($vo->hasVariadics());
         $this->assertTrue($vo->hasFlags());
-        $this->assertEquals(6, $vo->countArguments());
+        $this->assertEquals(7, $vo->countArguments());
     }
 
     public function test_signature_with_only_flags(): void
@@ -199,10 +260,12 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertSame('deploy', $vo->getSource());
         $this->assertEmpty($vo->getRequireds());
         $this->assertEmpty($vo->getDefaults());
+        $this->assertEmpty($vo->getNullables());
         $this->assertEmpty($vo->getVariadics());
         $this->assertEquals(['force', 'verbose'], $vo->getFlags());
         $this->assertFalse($vo->hasRequireds());
         $this->assertFalse($vo->hasDefaults());
+        $this->assertFalse($vo->hasNullables());
         $this->assertFalse($vo->hasVariadics());
         $this->assertTrue($vo->hasFlags());
         $this->assertEquals(0, $vo->countArguments());
@@ -215,10 +278,30 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertSame('deploy', $vo->getSource());
         $this->assertEmpty($vo->getRequireds());
         $this->assertEquals(['env' => 'production', 'port' => '8080'], $vo->getDefaults());
+        $this->assertEmpty($vo->getNullables());
         $this->assertEmpty($vo->getVariadics());
         $this->assertEmpty($vo->getFlags());
         $this->assertFalse($vo->hasRequireds());
         $this->assertTrue($vo->hasDefaults());
+        $this->assertFalse($vo->hasNullables());
+        $this->assertFalse($vo->hasVariadics());
+        $this->assertFalse($vo->hasFlags());
+        $this->assertEquals(2, $vo->countArguments());
+    }
+
+    public function test_signature_with_only_nullables(): void
+    {
+        $vo = new SignatureStructureVO('deploy {env?} {port?}');
+
+        $this->assertSame('deploy', $vo->getSource());
+        $this->assertEmpty($vo->getRequireds());
+        $this->assertEmpty($vo->getDefaults());
+        $this->assertEquals(['env', 'port'], $vo->getNullables());
+        $this->assertEmpty($vo->getVariadics());
+        $this->assertEmpty($vo->getFlags());
+        $this->assertFalse($vo->hasRequireds());
+        $this->assertFalse($vo->hasDefaults());
+        $this->assertTrue($vo->hasNullables());
         $this->assertFalse($vo->hasVariadics());
         $this->assertFalse($vo->hasFlags());
         $this->assertEquals(2, $vo->countArguments());
@@ -231,29 +314,15 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertSame('process', $vo->getSource());
         $this->assertEmpty($vo->getRequireds());
         $this->assertEmpty($vo->getDefaults());
+        $this->assertEmpty($vo->getNullables());
         $this->assertEquals(['files'], $vo->getVariadics());
         $this->assertEmpty($vo->getFlags());
         $this->assertFalse($vo->hasRequireds());
         $this->assertFalse($vo->hasDefaults());
+        $this->assertFalse($vo->hasNullables());
         $this->assertTrue($vo->hasVariadics());
         $this->assertFalse($vo->hasFlags());
         $this->assertEquals(1, $vo->countArguments());
-    }
-
-    public function test_signature_with_nullable_arguments(): void
-    {
-        $vo = new SignatureStructureVO('deploy {env?} {port?}');
-
-        $this->assertSame('deploy', $vo->getSource());
-        $this->assertEmpty($vo->getRequireds());
-        $this->assertEmpty($vo->getDefaults());
-        $this->assertEmpty($vo->getVariadics());
-        $this->assertEmpty($vo->getFlags());
-        $this->assertFalse($vo->hasRequireds());
-        $this->assertFalse($vo->hasDefaults());
-        $this->assertFalse($vo->hasVariadics());
-        $this->assertFalse($vo->hasFlags());
-        $this->assertEquals(0, $vo->countArguments());
     }
 
     public function test_signature_with_empty_defaults(): void
@@ -263,12 +332,26 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertSame('deploy', $vo->getSource());
         $this->assertEmpty($vo->getRequireds());
         $this->assertEmpty($vo->getDefaults());
+        $this->assertEmpty($vo->getNullables());
         $this->assertEmpty($vo->getVariadics());
         $this->assertEmpty($vo->getFlags());
         $this->assertFalse($vo->hasRequireds());
         $this->assertFalse($vo->hasDefaults());
+        $this->assertFalse($vo->hasNullables());
         $this->assertFalse($vo->hasVariadics());
         $this->assertFalse($vo->hasFlags());
         $this->assertEquals(0, $vo->countArguments());
+    }
+
+    public function test_mixed_default_and_nullable(): void
+    {
+        $vo = new SignatureStructureVO('deploy {env=production} {port?} {--force}');
+
+        $this->assertSame('deploy', $vo->getSource());
+        $this->assertEmpty($vo->getRequireds());
+        $this->assertEquals(['env' => 'production'], $vo->getDefaults());
+        $this->assertEquals(['port'], $vo->getNullables());
+        $this->assertEquals(['force'], $vo->getFlags());
+        $this->assertEquals(2, $vo->countArguments());
     }
 }

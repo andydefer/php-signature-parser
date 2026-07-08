@@ -108,55 +108,6 @@ final class SignatureVOTest extends TestCase
         $this->assertFalse($vo->hasDefault('nonexistent'));
     }
 
-    // ==================== NULLABLE ARGUMENTS TESTS ====================
-
-    public function test_get_nullable(): void
-    {
-        $vo = new SignatureVO(
-            'deploy {env?} {port?}',
-            'deploy staging 8080'
-        );
-
-        $this->assertSame('staging', $vo->getNullable('env'));
-        $this->assertSame('8080', $vo->getNullable('port'));
-        $this->assertNull($vo->getNullable('nonexistent'));
-    }
-
-    public function test_get_nullable_missing_values(): void
-    {
-        $vo = new SignatureVO(
-            'deploy {env?} {port?}',
-            'deploy'
-        );
-
-        $this->assertNull($vo->getNullable('env'));
-        $this->assertNull($vo->getNullable('port'));
-    }
-
-    public function test_get_nullables(): void
-    {
-        $vo = new SignatureVO(
-            'deploy {env?} {port?}',
-            'deploy staging 8080'
-        );
-
-        $this->assertEquals(
-            ['env' => 'staging', 'port' => '8080'],
-            $vo->getNullables()
-        );
-    }
-
-    public function test_has_nullable(): void
-    {
-        $vo = new SignatureVO(
-            'deploy {env?}',
-            'deploy staging'
-        );
-
-        $this->assertTrue($vo->hasNullable('env'));
-        $this->assertFalse($vo->hasNullable('nonexistent'));
-    }
-
     // ==================== VARIADIC ARGUMENTS TESTS ====================
 
     public function test_get_variadic(): void
@@ -396,17 +347,16 @@ final class SignatureVOTest extends TestCase
         $this->assertSame('staging', $vo->getDefault('env'));
     }
 
-    public function test_command_with_nullable_arguments(): void
+    public function test_command_with_default_and_nullable(): void
     {
-        $signature = 'deploy {env?} {port?} {--force}';
-        $query = 'deploy staging --force';
+        $signature = 'deploy {env=production} {region=?}';
+        $query = 'deploy staging';
 
         $vo = new SignatureVO($signature, $query);
 
         $this->assertSame('deploy', $vo->getSource());
-        $this->assertSame('staging', $vo->getNullable('env'));
-        $this->assertNull($vo->getNullable('port'));
-        $this->assertTrue($vo->getFlag('force'));
+        $this->assertSame('staging', $vo->getDefault('env'));
+        $this->assertNull($vo->getDefault('region'));
     }
 
     // ==================== VALIDATION TESTS ====================
@@ -484,18 +434,6 @@ final class SignatureVOTest extends TestCase
         $this->assertFalse($vo->isValid());
         $this->assertCount(1, $vo->getValidationErrors());
         $this->assertStringContainsString('unknown', $vo->getValidationErrors()->first());
-    }
-
-    public function test_is_valid_returns_true_for_nullable_missing_value(): void
-    {
-        $vo = new SignatureVO(
-            'deploy {env?} {--force}',
-            'deploy --force'
-        );
-
-        $this->assertTrue($vo->isValid());
-        $this->assertCount(0, $vo->getValidationErrors());
-        $this->assertNull($vo->getNullable('env'));
     }
 
     public function test_is_valid_returns_true_for_default_value(): void

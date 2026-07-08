@@ -15,7 +15,6 @@ use AndyDefer\SignatureParser\Contracts\SignatureParserInterface;
 use AndyDefer\SignatureParser\Formatters\TextFormatter;
 use AndyDefer\SignatureParser\Parsers\DefaultParser;
 use AndyDefer\SignatureParser\Parsers\FlagParser;
-use AndyDefer\SignatureParser\Parsers\NullableParser;
 use AndyDefer\SignatureParser\Parsers\RequiredParser;
 use AndyDefer\SignatureParser\Parsers\SourceParser;
 use AndyDefer\SignatureParser\Parsers\VariadicParser;
@@ -32,7 +31,6 @@ use AndyDefer\SignatureParser\Records\VariadicArgumentRecord;
  * - Source (command name)
  * - Required arguments: {name}
  * - Default arguments: {name=value}
- * - Nullable arguments: {name?}
  * - Variadic arguments: {name*}
  * - Boolean flags: {--flag}
  */
@@ -48,7 +46,6 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
     {
         $this->addParser(new SourceParser);
         $this->addParser(new RequiredParser);
-        $this->addParser(new NullableParser);
         $this->addParser(new DefaultParser);
         $this->addParser(new VariadicParser);
         $this->addParser(new FlagParser);
@@ -87,11 +84,20 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
 
     /**
      * {@inheritDoc}
+     *
+     * @throws \InvalidArgumentException If the signature order is invalid
      */
     public function parse(string $signature, string $query): ParsedSignatureRecord
     {
         $signatureElements = $this->extractSignatureElements($signature);
         $queryElements = $this->extractQueryElements($query);
+
+        $orderErrors = $this->validateSignatureOrder($signatureElements);
+        if (! $orderErrors->isEmpty()) {
+            throw new \InvalidArgumentException(
+                'Invalid signature order: '.$orderErrors->join(', ')
+            );
+        }
 
         $result = [];
         $currentSignature = $signatureElements;
@@ -122,6 +128,19 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         $errors = new StringTypedCollection;
         $suggestions = new StringTypedCollection;
 
+        $orderErrors = $this->validateSignatureOrder($signatureElements);
+        foreach ($orderErrors as $error) {
+            $errors->add($error);
+        }
+
+        if (! $errors->isEmpty()) {
+            return new ValidationResultRecord(
+                isValid: false,
+                errors: $errors,
+                suggestions: $suggestions
+            );
+        }
+
         $currentSignature = $signatureElements;
         $currentQuery = $queryElements;
 
@@ -147,6 +166,86 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             errors: $errors,
             suggestions: $suggestions
         );
+    }
+
+    /**
+     * Validates the order of arguments in the signature.
+     *
+     * Expected order:
+     * 1. Source (command name)
+     * 2. Required arguments: {name}
+     * 3. Default arguments: {name=value}
+     * 4. Variadic arguments: {name*}
+     * 5. Flags: {--flag}
+     *
+     * @param  StringTypedCollection  $signatureElements  The signature elements
+     * @return StringTypedCollection The order errors
+     */
+    private function validateSignatureOrder(StringTypedCollection $signatureElements): StringTypedCollection
+    {
+        $errors = new StringTypedCollection;
+        $elements = $signatureElements->toArray();
+
+        if (empty($elements)) {
+            return $errors;
+        }
+
+        $lastType = 'source';
+        $foundFlags = false;
+
+        foreach ($elements as $index => $element) {
+            if ($index === 0) {
+                continue;
+            }
+
+            $type = $this->determineElementType($element);
+
+            if ($type === 'flags') {
+                $foundFlags = true;
+
+                continue;
+            }
+
+            if ($foundFlags) {
+                $errors->add("Argument '{$element}' cannot appear after flags");
+
+                continue;
+            }
+
+            if ($type === 'required' && $lastType !== 'source' && $lastType !== 'required') {
+                $errors->add("Required argument '{$element}' must appear before default, variadic or flags");
+            }
+
+            if ($type === 'default' && $lastType !== 'source' && $lastType !== 'required' && $lastType !== 'default') {
+                $errors->add("Default argument '{$element}' must appear after required arguments and before variadic or flags");
+            }
+
+            if ($type === 'variadic' && $lastType !== 'source' && $lastType !== 'required' && $lastType !== 'default' && $lastType !== 'variadic') {
+                $errors->add("Variadic argument '{$element}' must appear after required and default arguments");
+            }
+
+            $lastType = $type;
+        }
+
+        return $errors;
+    }
+
+    /**
+     * Determines the type of a signature element.
+     */
+    private function determineElementType(string $element): string
+    {
+        if (str_starts_with($element, '--')) {
+            return 'flags';
+        }
+        if (str_contains($element, '*')) {
+            return 'variadic';
+        }
+        if (str_contains($element, '=')) {
+            return 'default';
+        }
+
+        return 'required';
     }
 
     /**
@@ -253,11 +352,6 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             $default->add(new ArgumentRecord($name, $value));
         }
 
-        $nullable = new ArgumentCollection;
-        foreach ($data['nullable'] ?? [] as $name => $value) {
-            $nullable->add(new ArgumentRecord($name, $value));
-        }
-
         $variadic = new VariadicArgumentCollection;
         foreach ($data['variadic'] ?? [] as $name => $values) {
             $variadic->add(new VariadicArgumentRecord(
@@ -275,7 +369,6 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             'source' => $data['source'] ?? '',
             'required' => $required,
             'default' => $default,
-            'nullable' => $nullable,
             'variadic' => $variadic,
             'flags' => $flags,
         ];
