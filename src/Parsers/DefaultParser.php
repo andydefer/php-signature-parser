@@ -151,6 +151,11 @@ final class DefaultParser implements ParserInterface
                     $errors->add("Default argument '{$name}' has empty value");
                     $suggestions->add("Use '{$name}=?' for nullable instead of '{$name}='");
                 }
+
+                // Ignorer les nullables valides
+                if ($defaultValue === '?') {
+                    continue;
+                }
             }
 
             if (str_ends_with($element, '?')) {
