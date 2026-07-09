@@ -1,6 +1,3 @@
-Tu as raison, désolé ! J'ai supprimé trop de contenu. Voici le README complet avec tout le contenu restauré :
-
-```markdown
 # PHP Signature Parser
 
 **Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les nullables, les variadiques et les flags avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^` et des tokens spéciaux (`?`, `~`).**
@@ -1126,4 +1123,4 @@ foreach ($signatures as $signature) {
 ## Licence
 
 MIT © [Andy Defer](https://github.com/andydefer)
-```
+---
