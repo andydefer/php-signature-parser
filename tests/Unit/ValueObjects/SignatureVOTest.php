@@ -84,6 +84,16 @@ final class SignatureVOTest extends TestCase
         $this->assertSame('zip', $vo->getDefault('format'));
     }
 
+    public function test_get_default_with_nullable(): void
+    {
+        $vo = new SignatureVO(
+            'deploy {env=?}',
+            'deploy ~'
+        );
+
+        $this->assertNull($vo->getDefault('env'));
+    }
+
     public function test_get_defaults(): void
     {
         $vo = new SignatureVO(
@@ -206,6 +216,94 @@ final class SignatureVOTest extends TestCase
         $this->assertFalse($vo->hasFlag('rm'));
     }
 
+    // ==================== CUSTOM TAGS TESTS ====================
+
+    public function test_get_custom(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting="Hello World">'
+        );
+
+        $this->assertSame('Hello World', $vo->getCustom('greeting'));
+        $this->assertNull($vo->getCustom('nonexistent'));
+    }
+
+    public function test_get_customs(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting="Hello World"> <later="goodby">'
+        );
+
+        $this->assertEquals(
+            ['greeting' => 'Hello World', 'later' => 'goodby'],
+            $vo->getCustoms()
+        );
+    }
+
+    public function test_has_custom(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting="Hello World">'
+        );
+
+        $this->assertTrue($vo->hasCustom('greeting'));
+        $this->assertFalse($vo->hasCustom('nonexistent'));
+    }
+
+    public function test_has_customs(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting="Hello World">'
+        );
+
+        $this->assertTrue($vo->hasCustoms());
+    }
+
+    public function test_has_customs_returns_false_when_no_tags(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose'
+        );
+
+        $this->assertFalse($vo->hasCustoms());
+    }
+
+    public function test_get_custom_with_multiple_tags(): void
+    {
+        $vo = new SignatureVO(
+            'deploy {environment} {--force}',
+            'deploy staging --force <version="1.2.3"> <user="admin">'
+        );
+
+        $this->assertSame('1.2.3', $vo->getCustom('version'));
+        $this->assertSame('admin', $vo->getCustom('user'));
+    }
+
+    public function test_get_custom_with_empty_value(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient}',
+            'send John <later="">'
+        );
+
+        $this->assertSame('', $vo->getCustom('later'));
+    }
+
+    public function test_get_customs_with_single_quotes(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient}',
+            "send John <greeting='Hello World'>"
+        );
+
+        $this->assertSame('Hello World', $vo->getCustom('greeting'));
+    }
+
     // ==================== PARSED STRUCTURE TESTS ====================
 
     public function test_get_parsed(): void
@@ -221,6 +319,22 @@ final class SignatureVOTest extends TestCase
         $this->assertEquals('docker', $parsed->source);
         $this->assertEquals(['container' => 'run'], $parsed->required->toArray());
         $this->assertEquals(['detach' => true], $parsed->flags->toArray());
+    }
+
+    public function test_get_parsed_with_custom_tags(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting="Hello World">'
+        );
+
+        $parsed = $vo->getParsed();
+
+        $this->assertInstanceOf(StrictDataObject::class, $parsed);
+        $this->assertEquals('send', $parsed->source);
+        $this->assertEquals(['recipient' => 'John'], $parsed->required->toArray());
+        $this->assertEquals(['verbose' => true], $parsed->flags->toArray());
+        $this->assertEquals(['greeting' => 'Hello World'], $parsed->custom_tags->toArray());
     }
 
     public function test_get_value(): void
@@ -359,6 +473,21 @@ final class SignatureVOTest extends TestCase
         $this->assertNull($vo->getDefault('region'));
     }
 
+    public function test_command_with_custom_tags_and_all_components(): void
+    {
+        $signature = 'deploy {environment} {version=?} {--force}';
+        $query = 'deploy staging --force <user="admin"> <timestamp="2026-07-10">';
+
+        $vo = new SignatureVO($signature, $query);
+
+        $this->assertSame('deploy', $vo->getSource());
+        $this->assertSame('staging', $vo->getRequired('environment'));
+        $this->assertNull($vo->getDefault('version'));
+        $this->assertTrue($vo->getFlag('force'));
+        $this->assertSame('admin', $vo->getCustom('user'));
+        $this->assertSame('2026-07-10', $vo->getCustom('timestamp'));
+    }
+
     // ==================== VALIDATION TESTS ====================
 
     public function test_is_valid_returns_true_for_valid_query(): void
@@ -480,5 +609,40 @@ final class SignatureVOTest extends TestCase
         $this->assertFalse($vo->isValid());
         $this->assertCount(1, $vo->getValidationErrors());
         $this->assertStringContainsString('Duplicate', $vo->getValidationErrors()->first());
+    }
+
+    public function test_is_valid_returns_true_for_valid_custom_tags(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting="Hello World">'
+        );
+
+        $this->assertTrue($vo->isValid());
+        $this->assertSame('Hello World', $vo->getCustom('greeting'));
+    }
+
+    public function test_is_valid_returns_false_for_invalid_custom_tag_syntax(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting Hello World>'
+        );
+
+        $this->assertFalse($vo->isValid());
+        $this->assertCount(1, $vo->getValidationErrors());
+        $this->assertStringContainsString('Invalid custom tag', $vo->getValidationErrors()->first());
+    }
+
+    public function test_is_valid_returns_false_for_unclosed_custom_tag(): void
+    {
+        $vo = new SignatureVO(
+            'send {recipient} {--verbose}',
+            'send John --verbose <greeting="Hello World"'
+        );
+
+        $this->assertFalse($vo->isValid());
+        $this->assertCount(1, $vo->getValidationErrors());
+        $this->assertStringContainsString('Unclosed custom tag', $vo->getValidationErrors()->first());
     }
 }

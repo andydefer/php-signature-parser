@@ -584,4 +584,157 @@ final class SignatureParserTest extends TestCase
         $this->assertGreaterThanOrEqual(1, $result->errors->count());
         $this->assertStringContainsString('duplicate', strtolower($result->errors->first()));
     }
+
+    public function test_message_parser(): void
+    {
+
+        $signature = 'send {recipient} {--verbose}';
+        $query = 'send John --verbose <greeting="Hello World"> <later="goodby">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        // ✅ Accès aux données personnalisées
+        $data = $result->custom_data->toArray();
+
+        $this->assertSame('Hello World', $data['greeting']);
+        $this->assertSame('goodby', $data['later']);
+
+        // ✅ Accès aux données standards (la requête a été nettoyée)
+        $this->assertSame('send', $result->source);
+        $this->assertSame('John', $result->required->first()->value);
+        $this->assertTrue($result->flags->first()->value);
+    }
+
+    // ==================== TESTS: Custom Parser Integration ====================
+
+    public function test_parse_with_custom_tag_parser_preserves_standard_components(): void
+    {
+        $signature = 'send {recipient} {--verbose}';
+        $query = 'send John --verbose <greeting="Hello World">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        // ✅ Standard components
+        $this->assertSame('send', $result->source);
+        $this->assertSame('John', $result->required->first()->value);
+        $this->assertTrue($result->flags->first()->value);
+
+        // ✅ Custom data
+        $data = $result->custom_data->toArray();
+        $this->assertArrayHasKey('greeting', $data);
+        $this->assertSame('Hello World', $data['greeting']);
+    }
+
+    public function test_parse_with_multiple_custom_tags(): void
+    {
+        $signature = 'deploy {environment} {--force}';
+        $query = 'deploy staging --force <version="1.2.3"> <user="admin">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('deploy', $result->source);
+        $this->assertSame('staging', $result->required->first()->value);
+        $this->assertTrue($result->flags->first()->value);
+
+        $data = $result->custom_data->toArray();
+        $this->assertArrayHasKey('version', $data);
+        $this->assertSame('1.2.3', $data['version']);
+        $this->assertArrayHasKey('user', $data);
+        $this->assertSame('admin', $data['user']);
+    }
+
+    public function test_parse_with_custom_tags_and_variadic_arguments(): void
+    {
+        $signature = 'process {files*} {--verbose}';
+        $query = 'process [file1.txt, file2.txt] --verbose <format="json">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('process', $result->source);
+        $this->assertCount(2, $result->variadic->first()->values);
+        $this->assertTrue($result->flags->first()->value);
+
+        $data = $result->custom_data->toArray();
+        $this->assertArrayHasKey('format', $data);
+        $this->assertSame('json', $data['format']);
+    }
+
+    public function test_parse_with_custom_tags_and_default_arguments(): void
+    {
+        $signature = 'backup {source} {format=zip} {--force}';
+        $query = 'backup /var/www --force <compression="gzip">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('backup', $result->source);
+        $this->assertSame('/var/www', $result->required->first()->value);
+        $this->assertSame('zip', $result->default->first()->value);
+        $this->assertTrue($result->flags->first()->value);
+
+        $data = $result->custom_data->toArray();
+        $this->assertArrayHasKey('compression', $data);
+        $this->assertSame('gzip', $data['compression']);
+    }
+
+    public function test_parse_with_only_custom_tags(): void
+    {
+        $signature = 'version';
+        $query = 'version <build="123"> <commit="abc">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('version', $result->source);
+        $this->assertEmpty($result->required);
+        $this->assertEmpty($result->default);
+        $this->assertEmpty($result->variadic);
+        $this->assertEmpty($result->flags);
+
+        $data = $result->custom_data->toArray();
+        $this->assertArrayHasKey('build', $data);
+        $this->assertSame('123', $data['build']);
+        $this->assertArrayHasKey('commit', $data);
+        $this->assertSame('abc', $data['commit']);
+    }
+
+    public function test_parse_custom_tags_preserves_query_order(): void
+    {
+        $signature = 'send {recipient} {--verbose}';
+        $query = 'send John --verbose <greeting="Hello"> <later="goodby">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        // ✅ Données standards
+        $this->assertSame('send', $result->source);
+        $this->assertSame('John', $result->required->first()->value);
+        $this->assertTrue($result->flags->first()->value);
+
+        // ✅ Données personnalisées
+        $data = $result->custom_data->toArray();
+        $this->assertArrayHasKey('greeting', $data);
+        $this->assertSame('Hello', $data['greeting']);
+        $this->assertArrayHasKey('later', $data);
+        $this->assertSame('goodby', $data['later']);
+    }
+
+    public function test_validate_with_custom_tags_returns_valid(): void
+    {
+        $signature = 'send {recipient} {--verbose}';
+        $query = 'send John --verbose <greeting="Hello World">';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_with_invalid_custom_tags_returns_errors(): void
+    {
+        $signature = 'send {recipient} {--verbose}';
+        $query = 'send John --verbose <greeting="Hello World" <invalid>';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertNotEmpty($result->errors);
+    }
 }

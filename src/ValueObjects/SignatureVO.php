@@ -20,9 +20,17 @@ use InvalidArgumentException;
  * - Default arguments
  * - Variadic arguments
  * - Boolean flags
+ * - Custom tags (<key="value">)
  *
  * Additionally, this VO validates the query against the signature and provides
  * validation results including errors and suggestions.
+ *
+ * @example
+ * $vo = new SignatureVO('send {recipient} {--verbose}', 'send John --verbose <greeting="Hello World">');
+ * $vo->getSource(); // 'send'
+ * $vo->getRequired('recipient'); // 'John'
+ * $vo->getFlag('verbose'); // true
+ * $vo->getCustom('greeting'); // 'Hello World'
  */
 final class SignatureVO extends AbstractValueObject
 {
@@ -46,6 +54,11 @@ final class SignatureVO extends AbstractValueObject
      */
     private array $flags = [];
 
+    /**
+     * @var array<string, string> Custom tags (key => value)
+     */
+    private array $customTags = [];
+
     private StrictDataObject $parsed;
 
     private ValidationResultRecord $validationResult;
@@ -57,7 +70,7 @@ final class SignatureVO extends AbstractValueObject
      * against the signature. Use isValid() to check if the query is valid.
      *
      * @param  string  $signature  The command signature (e.g., 'backup {source} {--force}')
-     * @param  string  $query  The actual command query (e.g., 'backup /var/www --force')
+     * @param  string  $query  The actual command query (e.g., 'backup /var/www --force <greeting="Hello">')
      *
      * @throws InvalidArgumentException If the signature or query is empty
      */
@@ -170,6 +183,38 @@ final class SignatureVO extends AbstractValueObject
     }
 
     /**
+     * Returns the value of a custom tag by key.
+     *
+     * @param  string  $key  The tag key
+     * @return string|null The tag value or null if not found
+     */
+    public function getCustom(string $key): ?string
+    {
+        return $this->customTags[$key] ?? null;
+    }
+
+    /**
+     * Returns all custom tags.
+     *
+     * @return array<string, string> Associative array of tag keys to values
+     */
+    public function getCustoms(): array
+    {
+        return $this->customTags;
+    }
+
+    /**
+     * Checks if a custom tag exists.
+     *
+     * @param  string  $key  The tag key
+     * @return bool True if the tag exists, false otherwise
+     */
+    public function hasCustom(string $key): bool
+    {
+        return isset($this->customTags[$key]);
+    }
+
+    /**
      * Returns the parsed structure as a StrictDataObject.
      */
     public function getParsed(): StrictDataObject
@@ -219,6 +264,16 @@ final class SignatureVO extends AbstractValueObject
     public function hasVariadic(string $name): bool
     {
         return isset($this->variadic[$name]);
+    }
+
+    /**
+     * Checks if any custom tags exist.
+     *
+     * @return bool True if custom tags exist, false otherwise
+     */
+    public function hasCustoms(): bool
+    {
+        return $this->customTags !== [];
     }
 
     /**
@@ -312,12 +367,19 @@ final class SignatureVO extends AbstractValueObject
             $this->flags[$flag->name] = $flag->value;
         }
 
+        // Extract custom tags from custom_data
+        $customData = $result->custom_data->toArray();
+        foreach ($customData as $key => $value) {
+            $this->customTags[$key] = $value;
+        }
+
         $this->parsed = new StrictDataObject([
             'source' => $this->source,
             'required' => $this->required,
             'default' => $this->default,
             'variadic' => $this->variadic,
             'flags' => $this->flags,
+            'custom_tags' => $this->customTags,
         ]);
     }
 

@@ -2,7 +2,7 @@
 
 ## Description
 
-Value Object représentant une paire signature/requête de commande CLI complète. Fournit un accès typé à tous les composants parsés et intègre la validation.
+Value Object représentant un couple signature/requête de commande CLI complet. Fournit un accès typé à tous les composants parsés et valide la requête contre la signature.
 
 ## Hiérarchie / Implémentations
 
@@ -13,7 +13,16 @@ AbstractValueObject
 
 ## Rôle principal
 
-`SignatureVO` combine une signature et une requête pour fournir une analyse complète d'une commande CLI. Contrairement à `SignatureStructureVO` qui analyse uniquement la structure, ce VO traite les valeurs réelles de la requête et intègre la validation.
+`SignatureVO` est la version complète de l'analyse des commandes CLI. Il combine l'analyse de la signature **et** de la requête pour fournir :
+
+- Le nom de la commande (source)
+- Les arguments requis avec leurs valeurs
+- Les arguments par défaut avec leurs valeurs
+- Les arguments variadiques avec leurs valeurs
+- Les flags avec leur état (actif/inactif)
+- Les tags personnalisés `<key="value">`
+- La validation de la requête contre la signature
+- Des erreurs et suggestions de correction
 
 ## Installation
 
@@ -21,14 +30,23 @@ AbstractValueObject
 composer require andydefer/php-signature-parser
 ```
 
+### Dépendances
+
+- `AbstractValueObject` - Classe de base des Value Objects
+- `StringTypedCollection` - Collection typée de chaînes
+- `StrictDataObject` - Structure de données immuable
+- `SignatureParser` - Parser de signatures
+- `ValidationResultRecord` - Enregistrement des résultats de validation
+- PHP 8.1+
+
 ## API / Méthodes publiques
 
 ### `__construct(string $signature, string $query)`
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$signature` | `string` | Définition de la commande |
-| `$query` | `string` | Commande exécutée |
+| `$signature` | `string` | Signature de la commande |
+| `$query` | `string` | Requête à analyser |
 
 **Retourne :** `void`
 
@@ -37,8 +55,8 @@ composer require andydefer/php-signature-parser
 **Exemple :**
 ```php
 $vo = new SignatureVO(
-    'backup {source} {destination} {format=zip} {--force}',
-    'backup /var/www /backup tar.gz --force'
+    'send {recipient} {--verbose}',
+    'send John --verbose <greeting="Hello World">'
 );
 ```
 
@@ -50,11 +68,6 @@ Retourne le nom de la commande.
 
 **Retourne :** `string` - Nom de la commande
 
-**Exemple :**
-```php
-$source = $vo->getSource(); // 'backup'
-```
-
 ---
 
 ### `getRequired(string $name): ?string`
@@ -63,14 +76,9 @@ Retourne la valeur d'un argument requis.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom de l'argument requis |
+| `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `?string` - La valeur ou `null`
-
-**Exemple :**
-```php
-$source = $vo->getRequired('source'); // '/var/www'
-```
+**Retourne :** `string|null` - Valeur ou `null` si non trouvé
 
 ---
 
@@ -78,12 +86,7 @@ $source = $vo->getRequired('source'); // '/var/www'
 
 Retourne tous les arguments requis.
 
-**Retourne :** `array<string, string>` - Tableau associatif
-
-**Exemple :**
-```php
-$requireds = $vo->getRequireds(); // ['source' => '/var/www', 'destination' => '/backup']
-```
+**Retourne :** `array<string, string>` - Tableau associatif [nom => valeur]
 
 ---
 
@@ -95,12 +98,7 @@ Retourne la valeur d'un argument par défaut.
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `?string` - La valeur ou `null`
-
-**Exemple :**
-```php
-$format = $vo->getDefault('format'); // 'tar.gz'
-```
+**Retourne :** `string|null` - Valeur ou `null` si non trouvé
 
 ---
 
@@ -108,12 +106,7 @@ $format = $vo->getDefault('format'); // 'tar.gz'
 
 Retourne tous les arguments par défaut.
 
-**Retourne :** `array<string, string|null>` - Tableau associatif
-
-**Exemple :**
-```php
-$defaults = $vo->getDefaults(); // ['format' => 'tar.gz']
-```
+**Retourne :** `array<string, string|null>` - Tableau associatif [nom => valeur]
 
 ---
 
@@ -127,24 +120,13 @@ Retourne les valeurs d'un argument variadique.
 
 **Retourne :** `array<string>` - Liste des valeurs
 
-**Exemple :**
-```php
-$excludes = $vo->getVariadic('excludes'); // ['cache', 'logs', 'tmp']
-```
-
 ---
 
 ### `getVariadics(): array`
 
 Retourne tous les arguments variadiques.
 
-**Retourne :** `array<string, array<string>>` - Tableau associatif
-
-**Exemple :**
-```php
-$variadics = $vo->getVariadics();
-// ['excludes' => ['cache', 'logs'], 'includes' => ['src']]
-```
+**Retourne :** `array<string, array<string>>` - Tableau associatif [nom => valeurs]
 
 ---
 
@@ -154,14 +136,9 @@ Retourne la valeur d'un flag.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom du flag |
+| `$name` | `string` | Nom du flag (sans `--`) |
 
-**Retourne :** `bool` - `true` si présent
-
-**Exemple :**
-```php
-$force = $vo->getFlag('force'); // true
-```
+**Retourne :** `bool` - `true` si le flag est actif
 
 ---
 
@@ -169,35 +146,55 @@ $force = $vo->getFlag('force'); // true
 
 Retourne tous les flags.
 
-**Retourne :** `array<string, bool>` - Tableau associatif
+**Retourne :** `array<string, bool>` - Tableau associatif [nom => état]
 
-**Exemple :**
-```php
-$flags = $vo->getFlags(); // ['force' => true, 'verbose' => false]
-```
+---
+
+### `getCustom(string $key): ?string`
+
+Retourne la valeur d'un tag personnalisé.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$key` | `string` | Clé du tag |
+
+**Retourne :** `string|null` - Valeur ou `null` si non trouvé
+
+---
+
+### `getCustoms(): array`
+
+Retourne tous les tags personnalisés.
+
+**Retourne :** `array<string, string>` - Tableau associatif [clé => valeur]
+
+---
+
+### `hasCustom(string $key): bool`
+
+Vérifie si un tag personnalisé existe.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$key` | `string` | Clé du tag |
+
+**Retourne :** `bool` - `true` si le tag existe
+
+---
+
+### `hasCustoms(): bool`
+
+Vérifie si des tags personnalisés existent.
+
+**Retourne :** `bool` - `true` si des tags existent
 
 ---
 
 ### `getParsed(): StrictDataObject`
 
-Retourne la structure complète parsée.
+Retourne la structure parsée.
 
-**Retourne :** `StrictDataObject`
-
-**Exemple :**
-```php
-$parsed = $vo->getParsed();
-echo $parsed->source;
-echo $parsed->required['source'];
-```
-
----
-
-### `getValue(): StrictDataObject`
-
-Alias de `getParsed()`.
-
-**Retourne :** `StrictDataObject`
+**Retourne :** `StrictDataObject` - Structure complète
 
 ---
 
@@ -209,7 +206,7 @@ Vérifie si un flag est présent et actif.
 |-----------|------|-------------|
 | `$name` | `string` | Nom du flag |
 
-**Retourne :** `bool`
+**Retourne :** `bool` - `true` si le flag est actif
 
 ---
 
@@ -221,7 +218,7 @@ Vérifie si un argument requis existe.
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `bool`
+**Retourne :** `bool` - `true` si l'argument existe
 
 ---
 
@@ -233,7 +230,7 @@ Vérifie si un argument par défaut existe.
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `bool`
+**Retourne :** `bool` - `true` si l'argument existe
 
 ---
 
@@ -245,22 +242,15 @@ Vérifie si un argument variadique existe.
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `bool`
+**Retourne :** `bool` - `true` si l'argument existe
 
 ---
 
 ### `isValid(): bool`
 
-Vérifie si la requête est valide.
+Retourne si la requête est valide contre la signature.
 
-**Retourne :** `bool`
-
-**Exemple :**
-```php
-if ($vo->isValid()) {
-    echo "Commande valide";
-}
-```
+**Retourne :** `bool` - `true` si la requête est valide
 
 ---
 
@@ -268,98 +258,112 @@ if ($vo->isValid()) {
 
 Retourne les erreurs de validation.
 
-**Retourne :** `StringTypedCollection`
-
-**Exemple :**
-```php
-foreach ($vo->getValidationErrors() as $error) {
-    echo $error;
-}
-```
+**Retourne :** `StringTypedCollection` - Collection des messages d'erreur
 
 ---
 
 ### `getValidationSuggestions(): StringTypedCollection`
 
-Retourne les suggestions de correction.
+Retourne des suggestions pour corriger les erreurs.
 
-**Retourne :** `StringTypedCollection`
+**Retourne :** `StringTypedCollection` - Collection des suggestions
 
 ---
 
 ### `getValidationResult(): ValidationResultRecord`
 
-Retourne le résultat complet de validation.
+Retourne le résultat complet de la validation.
 
-**Retourne :** `ValidationResultRecord`
+**Retourne :** `ValidationResultRecord` - Résultat de la validation
+
+---
+
+### `getValue(): StrictDataObject`
+
+Retourne la structure sous forme de `StrictDataObject`.
+
+**Retourne :** `StrictDataObject` - Structure complète
 
 ---
 
 ### `equals(AbstractValueObject $other): bool`
 
-Compare deux `SignatureVO` pour l'égalité.
+Vérifie l'égalité avec un autre Value Object.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$other` | `AbstractValueObject` | Autre Value Object |
+| `$other` | `AbstractValueObject` | Autre Value Object à comparer |
 
-**Retourne :** `bool` - `true` si les signatures ET les requêtes sont identiques
+**Retourne :** `bool` - `true` si les objets sont égaux
 
 ---
 
 ## Cas d'utilisation
 
-### Cas 1 : Validation de commande
+### Cas 1 : Analyse d'une commande avec tags personnalisés
 
 ```php
+<?php
+
+use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
+
 $vo = new SignatureVO(
-    'deploy {env} {--force}',
-    'deploy staging'
+    'send {recipient} {--verbose}',
+    'send John --verbose <greeting="Hello World"> <later="goodby">'
+);
+
+echo "Source: " . $vo->getSource() . "\n";
+echo "Destinataire: " . $vo->getRequired('recipient') . "\n";
+echo "Verbose: " . ($vo->getFlag('verbose') ? 'Oui' : 'Non') . "\n";
+echo "Greeting: " . $vo->getCustom('greeting') . "\n";
+echo "Later: " . $vo->getCustom('later') . "\n";
+
+// Source: send
+// Destinataire: John
+// Verbose: Oui
+// Greeting: Hello World
+// Later: goodby
+```
+
+### Cas 2 : Validation d'une commande
+
+```php
+<?php
+
+$vo = new SignatureVO(
+    'backup {source} {destination} {--force}',
+    'backup /var/www --force'
 );
 
 if (!$vo->isValid()) {
+    echo "❌ Commande invalide:\n";
     foreach ($vo->getValidationErrors() as $error) {
-        echo "Erreur: $error\n";
+        echo "  - $error\n";
     }
-    foreach ($vo->getValidationSuggestions() as $suggestion) {
-        echo "Suggestion: $suggestion\n";
-    }
+} else {
+    echo "✅ Commande valide\n";
 }
+// ❌ Commande invalide:
+//   - Missing required argument: 'destination'
 ```
 
-### Cas 2 : Extraction des valeurs
+### Cas 3 : Commande complexe avec tous les composants
 
 ```php
-$vo = new SignatureVO(
-    'backup {source} {destination} {format=zip} {excludes*} {--force}',
-    'backup /var/www /backup tar.gz [cache, logs] --force'
-);
+<?php
 
-$source = $vo->getRequired('source');        // '/var/www'
-$format = $vo->getDefault('format');         // 'tar.gz'
-$excludes = $vo->getVariadic('excludes');    // ['cache', 'logs']
-$force = $vo->getFlag('force');              // true
-```
+$signature = 'deploy {environment} {version=?} {--force} {--verbose}';
+$query = 'deploy staging --force <user="admin"> <timestamp="2026-07-10">';
 
-### Cas 3 : Validation avec suggestions
+$vo = new SignatureVO($signature, $query);
 
-```php
-$vo = new SignatureVO(
-    'backup {source} {destination}',
-    'backup /var/www'
-);
-
-if (!$vo->isValid()) {
-    $errors = $vo->getValidationErrors();
-    $suggestions = $vo->getValidationSuggestions();
-    
-    foreach ($errors as $error) {
-        echo "❌ $error\n";
-    }
-    foreach ($suggestions as $suggestion) {
-        echo "💡 $suggestion\n";
-    }
-}
+echo "=== Déploiement ===\n";
+echo "Environnement: " . $vo->getRequired('environment') . "\n";
+echo "Version: " . ($vo->getDefault('version') ?? 'non spécifiée') . "\n";
+echo "Force: " . ($vo->getFlag('force') ? '✅' : '❌') . "\n";
+echo "Verbose: " . ($vo->getFlag('verbose') ? '✅' : '❌') . "\n";
+echo "User: " . $vo->getCustom('user') . "\n";
+echo "Timestamp: " . $vo->getCustom('timestamp') . "\n";
 ```
 
 ---
@@ -367,25 +371,26 @@ if (!$vo->isValid()) {
 ## Flux d'exécution
 
 ```
-Constructeur
+new SignatureVO($signature, $query)
     ↓
-Vérification des paramètres
+Valider que signature et query ne sont pas vides
     ↓
-parse() → SignatureParser::parse()
+SignatureParser::parse($signature, $query)
     ↓
-Extraction des données
-    ├── source → $this->source
-    ├── required → $this->required
-    ├── default → $this->default
-    ├── variadic → $this->variadic
-    └── flags → $this->flags
+Extraire les composants
+    ├── Source
+    ├── Required arguments
+    ├── Default arguments
+    ├── Variadic arguments
+    ├── Flags
+    └── Custom tags
     ↓
-validate() → SignatureParser::validate()
+SignatureParser::validate($signature, $query)
     ↓
-ValidationResultRecord
-    ↓
-StrictDataObject
+Retourner SignatureVO
 ```
+
+---
 
 ## Gestion des erreurs
 
@@ -393,57 +398,74 @@ StrictDataObject
 |-----------|-----------|---------|
 | Signature vide | `InvalidArgumentException` | `Signature cannot be empty` |
 | Query vide | `InvalidArgumentException` | `Query cannot be empty` |
-| Ordre invalide | `InvalidArgumentException` | `Invalid signature order: {error}` |
+| Argument requis manquant | Validation | `Missing required argument: '{name}'` |
+| Flag inconnu | Validation | `Unknown flag: '{flag}'` |
+| Tag invalide | Validation | `Invalid custom tag syntax: <{tag}>` |
+| Tag non fermé | Validation | `Unclosed custom tag` |
+| Variadique sans signature | Validation | `Variadic argument provided but not defined` |
+
+---
 
 ## Intégration
-
-### Avec SignatureStructureVO
-
-```php
-// Structure seule
-$structure = new SignatureStructureVO($signature);
-
-// Structure + valeurs
-$vo = new SignatureVO($signature, $query);
-
-// Vérification de présence
-if ($structure->hasRequired('source')) {
-    $value = $vo->getRequired('source');
-}
-```
 
 ### Avec SignatureParser
 
 ```php
 $parser = new SignatureParser();
-$parsed = $parser->parse($signature, $query);
-$validation = $parser->validate($signature, $query);
-
-// Le VO encapsule cette logique
-$vo = new SignatureVO($signature, $query);
+$result = $parser->parse('greet {name}', 'greet John');
+$vo = new SignatureVO('greet {name}', 'greet John');
 ```
+
+### Avec QueryBuilder
+
+```php
+$builder = QueryBuilder::init('greet {name} {--formal}');
+$builder->setRequired('name', 'John');
+$builder->setFlag('--formal', true);
+$query = $builder->build();
+
+$vo = new SignatureVO('greet {name} {--formal}', $query);
+```
+
+### Avec ValidationResultRecord
+
+```php
+$vo = new SignatureVO('greet {name}', 'greet');
+$result = $vo->getValidationResult();
+
+if (!$result->isValid) {
+    foreach ($result->errors as $error) {
+        echo $error . "\n";
+    }
+}
+```
+
+---
 
 ## Performance
 
 | Opération | Complexité | Détails |
 |-----------|------------|---------|
-| `__construct()` | O(n) | Parsing + validation |
+| `__construct()` | O(n) | n = nombre de tokens |
 | `getSource()` | O(1) | Accès direct |
 | `getRequired()` | O(1) | Accès tableau |
-| `getDefaults()` | O(1) | Accès direct |
-| `getVariadic()` | O(1) | Accès tableau |
-| `getFlag()` | O(1) | Accès tableau |
-| `isValid()` | O(1) | Accès direct |
-| `getValidationErrors()` | O(1) | Accès direct |
+| `getRequireds()` | O(1) | Accès direct |
+| `getCustom()` | O(1) | Accès tableau |
+| `getCustoms()` | O(1) | Accès direct |
+| `isValid()` | O(1) | Accès à la propriété |
+
+---
 
 ## Compatibilité
 
-| Version PHP | Support | Notes |
-|-------------|---------|-------|
+| Version | Support | Notes |
+|---------|---------|-------|
 | PHP 8.4 | ✅ Complet | Support total |
 | PHP 8.3 | ✅ Complet | Support total |
 | PHP 8.2 | ✅ Complet | Support total |
 | PHP 8.1 | ✅ Complet | Support total |
+
+---
 
 ## Exemple complet
 
@@ -454,56 +476,82 @@ declare(strict_types=1);
 
 use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
 
-$signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
-$query = 'backup /var/www /backup tar.gz dist [cache, logs, tmp] [home, data, models] --force';
+// 1. Création
+$signature = 'deploy {environment} {version=?} {files*} {--force} {--verbose}';
+$query = 'deploy staging --force [config.yaml, secrets.json] <user="admin"> <timestamp="2026-07-10">';
 
 $vo = new SignatureVO($signature, $query);
 
-echo "Source: " . $vo->getSource() . "\n";
-
-echo "Arguments requis:\n";
-foreach ($vo->getRequireds() as $name => $value) {
-    echo "  $name: $value\n";
-}
-
-echo "Valeurs par défaut:\n";
-foreach ($vo->getDefaults() as $name => $value) {
-    echo "  $name: $value\n";
-}
-
-echo "Arguments variadiques:\n";
-foreach ($vo->getVariadics() as $name => $values) {
-    echo "  $name: " . implode(', ', $values) . "\n";
-}
-
-echo "Flags:\n";
-foreach ($vo->getFlags() as $name => $value) {
-    echo "  $name: " . ($value ? 'true' : 'false') . "\n";
-}
-
-echo "Validation: " . ($vo->isValid() ? '✅ Valide' : '❌ Invalide') . "\n";
-
-if (!$vo->isValid()) {
-    echo "Erreurs:\n";
+// 2. Validation
+echo "=== Validation ===\n";
+if ($vo->isValid()) {
+    echo "✅ Commande valide\n\n";
+} else {
+    echo "❌ Commande invalide:\n";
     foreach ($vo->getValidationErrors() as $error) {
         echo "  - $error\n";
     }
-    echo "Suggestions:\n";
+    echo "\nSuggestions:\n";
     foreach ($vo->getValidationSuggestions() as $suggestion) {
         echo "  - $suggestion\n";
     }
+    exit(1);
 }
 
-$parsed = $vo->getParsed();
-echo "\nParsed data:\n";
-print_r($parsed->toArray());
+// 3. Affichage des composants
+echo "=== Composants de la commande ===\n";
+echo "Source: " . $vo->getSource() . "\n\n";
+
+echo "Arguments requis:\n";
+foreach ($vo->getRequireds() as $name => $value) {
+    echo "  - $name: $value\n";
+}
+echo "\n";
+
+echo "Arguments par défaut:\n";
+foreach ($vo->getDefaults() as $name => $value) {
+    $display = $value ?? 'null';
+    echo "  - $name: $display\n";
+}
+echo "\n";
+
+echo "Arguments variadiques:\n";
+foreach ($vo->getVariadics() as $name => $values) {
+    echo "  - $name: " . implode(', ', $values) . "\n";
+}
+echo "\n";
+
+echo "Flags:\n";
+foreach ($vo->getFlags() as $name => $active) {
+    echo "  - --$name: " . ($active ? '✅' : '❌') . "\n";
+}
+echo "\n";
+
+echo "Tags personnalisés:\n";
+foreach ($vo->getCustoms() as $key => $value) {
+    echo "  - $key: $value\n";
+}
+echo "\n";
+
+// 4. Vérifications spécifiques
+echo "=== Vérifications ===\n";
+$checks = ['environment', 'version', 'files', 'force', 'user'];
+
+foreach ($checks as $name) {
+    if ($vo->hasCustom($name)) {
+        echo "Tag '$name': " . $vo->getCustom($name) . "\n";
+    } elseif ($vo->hasRequired($name)) {
+        echo "Argument requis '$name': " . $vo->getRequired($name) . "\n";
+    } elseif ($vo->hasFlag($name)) {
+        echo "Flag '$name': " . ($vo->getFlag($name) ? 'actif' : 'inactif') . "\n";
+    }
+}
 ```
 
 ## Voir aussi
 
-- `SignatureStructureVO` - Analyse de structure sans requête
-- `SignatureParser` - Parseur principal
-- `ParsedSignatureRecord` - Structure de données
+- `SignatureStructureVO` - Analyse de la structure des signatures
+- `SignatureParser` - Parser principal
+- `QueryBuilder` - Construction dynamique de requêtes
 - `ValidationResultRecord` - Résultat de validation
-- `TextFormatter` - Formateur des valeurs
----
+- `StrictDataObject` - Structure de données immuable

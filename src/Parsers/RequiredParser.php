@@ -9,53 +9,65 @@ use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 
+/**
+ * Extracts required arguments from a signature and query.
+ *
+ * Required arguments are simple tokens without '=', '*', '?', or '--' prefix.
+ * They must appear in the query in the order they are defined.
+ *
+ * @example
+ * Signature: '{source} {destination}'
+ * Query: '/var/www /backup'
+ * Result: ['source' => '/var/www', 'destination' => '/backup']
+ */
 final class RequiredParser implements ParserInterface
 {
+    private const PLACEHOLDER_MISSING = '~';
+
+    /**
+     * {@inheritDoc}
+     */
     public function parse(array $signature, array $query): ParsedResultRecord
     {
         $required = [];
-        $newSignature = [];
-        $newQuery = [];
+        $remainingSignature = [];
+        $remainingQuery = [];
         $queryIndex = 0;
         $queryCount = count($query);
 
         foreach ($signature as $element) {
-            $isRequired = $this->isRequiredArgument($element);
-
-            if ($isRequired) {
+            if ($this->isRequiredArgument($element)) {
                 $required[$element] = $query[$queryIndex] ?? '';
                 $queryIndex++;
             } else {
-                $newSignature[] = $element;
+                $remainingSignature[] = $element;
             }
         }
 
+        // Preserve remaining query tokens for subsequent parsers
         while ($queryIndex < $queryCount) {
-            $newQuery[] = $query[$queryIndex];
+            $remainingQuery[] = $query[$queryIndex];
             $queryIndex++;
         }
 
         return ParsedResultRecord::from([
             'data' => ['required' => $required],
-            'signature' => $newSignature,
-            'query' => $newQuery,
+            'signature' => $remainingSignature,
+            'query' => $remainingQuery,
         ]);
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function validate(array $signature, array $query): ValidationResultRecord
     {
         $errors = new StringTypedCollection;
         $suggestions = new StringTypedCollection;
 
-        // Récupérer UNIQUEMENT les arguments requis
-        $requireds = [];
-        foreach ($signature as $element) {
-            if ($this->isRequiredArgument($element)) {
-                $requireds[] = $element;
-            }
-        }
+        $requiredArguments = $this->extractRequiredArgumentNames($signature);
 
-        if (empty($requireds)) {
+        if ($requiredArguments === []) {
             return new ValidationResultRecord(
                 isValid: true,
                 errors: $errors,
@@ -63,49 +75,16 @@ final class RequiredParser implements ParserInterface
             );
         }
 
-        // Extraire les valeurs de la query (uniquement les arguments, pas les flags/variadiques)
-        $providedValues = [];
-        $queryCount = count($query);
-        $queryIndex = 0;
+        $providedValues = $this->extractProvidedArgumentValues($query);
 
-        // Parcourir la query et prendre uniquement les valeurs qui sont des arguments
-        while ($queryIndex < $queryCount) {
-            $current = $query[$queryIndex];
+        $missingArguments = $this->findMissingRequiredArguments(
+            $requiredArguments,
+            $providedValues
+        );
 
-            // Stop at flag or variadic
-            if (str_starts_with($current, '--') ||
-                (str_starts_with($current, '[') && str_ends_with($current, ']'))) {
-                break;
-            }
-
-            // Si c'est un argument simple (pas de =, *, ?)
-            if (! str_contains($current, '=') &&
-                ! str_contains($current, '*') &&
-                ! str_ends_with($current, '?')) {
-                $providedValues[] = $current;
-            }
-
-            $queryIndex++;
-        }
-
-        // Récupérer les arguments manquants
-        $missing = [];
-        $providedCount = count($providedValues);
-
-        // Si le nombre de valeurs fournies est inférieur au nombre de requis
-        if ($providedCount < count($requireds)) {
-            // Prendre les arguments requis qui n'ont pas été fournis
-            for ($i = $providedCount; $i < count($requireds); $i++) {
-                if (isset($requireds[$i])) {
-                    $missing[] = $requireds[$i];
-                }
-            }
-        }
-
-        // Ajouter les erreurs pour chaque argument manquant
-        foreach ($missing as $arg) {
-            $errors->add("Missing required argument: '{$arg}'");
-            $suggestions->add("Provide a value for '{$arg}'");
+        foreach ($missingArguments as $argument) {
+            $errors->add("Missing required argument: '{$argument}'");
+            $suggestions->add("Provide a value for '{$argument}'");
         }
 
         return new ValidationResultRecord(
@@ -116,18 +95,106 @@ final class RequiredParser implements ParserInterface
     }
 
     /**
-     * Détermine si un élément est un argument requis.
+     * {@inheritDoc}
      */
-    private function isRequiredArgument(string $element): bool
-    {
-        return ! str_contains($element, '=') &&
-               ! str_contains($element, '*') &&
-               ! str_ends_with($element, '?') &&
-               ! str_starts_with($element, '--');
-    }
-
     public function getTokenPattern(): string
     {
         return '/^[a-zA-Z_][a-zA-Z0-9_]*$/';
+    }
+
+    /**
+     * Determines if an element is a required argument.
+     *
+     * Required arguments are simple tokens without:
+     * - '=' (default or nullable)
+     * - '*' (variadic)
+     * - '?' (nullable)
+     * - '--' (flag)
+     */
+    private function isRequiredArgument(string $element): bool
+    {
+        return ! str_contains($element, '=')
+            && ! str_contains($element, '*')
+            && ! str_ends_with($element, '?')
+            && ! str_starts_with($element, '--');
+    }
+
+    /**
+     * Extracts the names of all required arguments from the signature.
+     *
+     * @param  array<int, string>  $signature  The signature tokens
+     * @return array<int, string> The required argument names
+     */
+    private function extractRequiredArgumentNames(array $signature): array
+    {
+        $requireds = [];
+
+        foreach ($signature as $element) {
+            if ($this->isRequiredArgument($element)) {
+                $requireds[] = $element;
+            }
+        }
+
+        return $requireds;
+    }
+
+    /**
+     * Extracts argument values from the query, ignoring flags and variadics.
+     *
+     * @param  array<int, string>  $query  The query tokens
+     * @return array<int, string> The provided argument values
+     */
+    private function extractProvidedArgumentValues(array $query): array
+    {
+        $providedValues = [];
+        $queryCount = count($query);
+        $queryIndex = 0;
+
+        while ($queryIndex < $queryCount) {
+            $current = $query[$queryIndex];
+
+            // Stop at flag or variadic
+            if (str_starts_with($current, '--') ||
+                (str_starts_with($current, '[') && str_ends_with($current, ']'))) {
+                break;
+            }
+
+            // Skip the placeholder for missing values
+            if ($current !== self::PLACEHOLDER_MISSING
+                && ! str_contains($current, '=')
+                && ! str_contains($current, '*')
+                && ! str_ends_with($current, '?')) {
+                $providedValues[] = $current;
+            }
+
+            $queryIndex++;
+        }
+
+        return $providedValues;
+    }
+
+    /**
+     * Finds required arguments that are missing from the provided values.
+     *
+     * @param  array<int, string>  $requiredArguments  The required argument names
+     * @param  array<int, string>  $providedValues  The provided argument values
+     * @return array<int, string> The missing required argument names
+     */
+    private function findMissingRequiredArguments(
+        array $requiredArguments,
+        array $providedValues
+    ): array {
+        $missing = [];
+        $providedCount = count($providedValues);
+
+        if ($providedCount < count($requiredArguments)) {
+            for ($i = $providedCount; $i < count($requiredArguments); $i++) {
+                if (isset($requiredArguments[$i])) {
+                    $missing[] = $requiredArguments[$i];
+                }
+            }
+        }
+
+        return $missing;
     }
 }
