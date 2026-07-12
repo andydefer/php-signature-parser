@@ -19,6 +19,7 @@ use InvalidArgumentException;
  * - Default arguments: {name=value} (including nullables with value null)
  * - Variadic arguments: {name*}
  * - Boolean flags: {--flag}
+ * - Enum arguments: ::name->[value1,value2,value3]=default
  *
  * The structure is validated at construction time using the SignatureParser.
  *
@@ -28,6 +29,7 @@ use InvalidArgumentException;
  * $structure->getDefaults();       // ['format' => 'zip', 'env' => null]
  * $structure->getVariadics();      // ['excludes']
  * $structure->getFlags();          // ['force']
+ * $structure->getEnums();          // []
  */
 final class SignatureStructureVO extends AbstractValueObject
 {
@@ -44,6 +46,9 @@ final class SignatureStructureVO extends AbstractValueObject
 
     /** @var array<string> */
     private array $flags = [];
+
+    /** @var array<string, array{allowed_values: array<string>, default_value: string|null, is_required: bool, is_optional: bool}> */
+    private array $enums = [];
 
     private string $rawSignature;
 
@@ -81,6 +86,7 @@ final class SignatureStructureVO extends AbstractValueObject
             'default' => $this->default,
             'variadic' => $this->variadic,
             'flags' => $this->flags,
+            'enums' => $this->enums,
         ]);
     }
 
@@ -140,6 +146,76 @@ final class SignatureStructureVO extends AbstractValueObject
     public function getFlags(): array
     {
         return $this->flags;
+    }
+
+    /**
+     * Returns the enum definitions.
+     *
+     * @return array<string, array{allowed_values: array<string>, default_value: string|null, is_required: bool, is_optional: bool}>
+     */
+    public function getEnums(): array
+    {
+        return $this->enums;
+    }
+
+    /**
+     * Gets the allowed values for a specific enum.
+     *
+     * @param  string  $name  The enum name
+     * @return array<string>|null The allowed values or null if the enum doesn't exist
+     */
+    public function getEnumAllowedValues(string $name): ?array
+    {
+        return $this->enums[$name]['allowed_values'] ?? null;
+    }
+
+    /**
+     * Gets the default value for a specific enum.
+     *
+     * @param  string  $name  The enum name
+     * @return string|null The default value or null if not set
+     */
+    public function getEnumDefaultValue(string $name): ?string
+    {
+        return $this->enums[$name]['default_value'] ?? null;
+    }
+
+    /**
+     * Checks if an enum is required.
+     *
+     * @param  string  $name  The enum name
+     */
+    public function isEnumRequired(string $name): bool
+    {
+        return $this->enums[$name]['is_required'] ?? false;
+    }
+
+    /**
+     * Checks if an enum is optional.
+     *
+     * @param  string  $name  The enum name
+     */
+    public function isEnumOptional(string $name): bool
+    {
+        return $this->enums[$name]['is_optional'] ?? false;
+    }
+
+    /**
+     * Checks if an enum exists.
+     *
+     * @param  string  $name  The enum name
+     */
+    public function hasEnum(string $name): bool
+    {
+        return isset($this->enums[$name]);
+    }
+
+    /**
+     * Checks if the signature has any enums.
+     */
+    public function hasEnums(): bool
+    {
+        return $this->enums !== [];
     }
 
     /**
@@ -292,6 +368,13 @@ final class SignatureStructureVO extends AbstractValueObject
                 continue;
             }
 
+            // ✅ Check for enum: ::name->[values]=default
+            if (str_starts_with($element, '::')) {
+                $this->parseEnumElement($element);
+
+                continue;
+            }
+
             if (str_starts_with($element, '--')) {
                 $this->flags[] = ltrim($element, '--');
 
@@ -318,5 +401,53 @@ final class SignatureStructureVO extends AbstractValueObject
 
             $this->required[] = $element;
         }
+    }
+
+    /**
+     * Parses an enum element and adds it to the enums array.
+     *
+     * @param  string  $element  The enum element (e.g., '::level->[beginner,middle,master]=middle')
+     */
+    private function parseEnumElement(string $element): void
+    {
+        // Remove the '::' prefix
+        $elementWithoutPrefix = substr($element, 2);
+
+        // Extract the name before ->
+        $name = substr($elementWithoutPrefix, 0, strpos($elementWithoutPrefix, '->'));
+
+        // Extract the allowed values between brackets
+        $bracketContent = substr($elementWithoutPrefix, strpos($elementWithoutPrefix, '[') + 1);
+        $bracketContent = substr($bracketContent, 0, strpos($bracketContent, ']'));
+
+        $allowedValues = array_map('trim', explode(',', $bracketContent));
+        $allowedValues = array_filter($allowedValues, fn ($v) => $v !== '');
+        $allowedValues = array_values($allowedValues);
+
+        // Extract the default value (after =)
+        $defaultValue = null;
+        $isRequired = false;
+        $isOptional = false;
+
+        if (str_contains($elementWithoutPrefix, '=')) {
+            $defaultPart = substr($elementWithoutPrefix, strrpos($elementWithoutPrefix, '=') + 1);
+
+            if ($defaultPart === '*') {
+                $isRequired = true;
+            } elseif ($defaultPart === '?') {
+                $isOptional = true;
+            } else {
+                $defaultValue = $defaultPart;
+            }
+        } else {
+            $isRequired = true;
+        }
+
+        $this->enums[$name] = [
+            'allowed_values' => $allowedValues,
+            'default_value' => $defaultValue,
+            'is_required' => $isRequired,
+            'is_optional' => $isOptional,
+        ];
     }
 }

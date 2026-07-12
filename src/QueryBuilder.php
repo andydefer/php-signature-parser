@@ -19,6 +19,7 @@ use InvalidArgumentException;
  * - Nullable arguments (with null defaults)
  * - Variadic arguments
  * - Boolean flags
+ * - Enum arguments (::name->[values])
  * - Custom tags (<key="value">)
  *
  * @example
@@ -41,6 +42,9 @@ final class QueryBuilder
 
     /** @var array<string, string> */
     private array $customTags = [];
+
+    /** @var array<string, string> */
+    private array $enums = [];
 
     private string $source;
 
@@ -75,8 +79,12 @@ final class QueryBuilder
         $this->structure = $structure;
         $this->source = $structure->getSource();
 
-        // Initialize with default values
+        // ✅ Initialiser avec les valeurs par défaut - ignorer les tokens d'énum
         foreach ($structure->getDefaults() as $name => $defaultValue) {
+            // ✅ Si le nom contient '->[' c'est un token d'énum, on le saute
+            if (str_contains($name, '->[')) {
+                continue;
+            }
             $this->arguments[$name] = $defaultValue ?? '~';
         }
 
@@ -98,12 +106,17 @@ final class QueryBuilder
     {
         $parser = new SignatureParser;
         $parsed = $parser->parse($this->structure->getRaw(), $query);
+        $queryTokens = explode(' ', $query);
 
         foreach ($parsed->required as $arg) {
             $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '~';
         }
 
         foreach ($parsed->default as $arg) {
+            // ✅ Vérifier si c'est un enum ou un token d'énum
+            if ($this->isEnumArgument($arg->name) || str_contains($arg->name, '->[')) {
+                continue;
+            }
             $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '~';
         }
 
@@ -116,7 +129,16 @@ final class QueryBuilder
             $this->flags['--'.$flag->name] = $flag->value;
         }
 
-        // Extract custom tags from the parsed data
+        // ✅ Extract enums
+        foreach ($parsed->enum as $enum) {
+            if ($enum->value !== null && in_array((string) $enum->value, $queryTokens, true)) {
+                $this->enums[$enum->name] = $enum->value;
+            } elseif ($enum->value === '~' && in_array('~', $queryTokens, true)) {
+                $this->enums[$enum->name] = '~';
+            }
+        }
+
+        // Extract custom tags
         $customData = $parsed->custom_data->toArray();
         foreach ($customData as $key => $value) {
             $this->customTags[$key] = $value;
@@ -145,7 +167,6 @@ final class QueryBuilder
         }
 
         if ($this->structure->hasRequired($name)) {
-            // Required arguments cannot be null or empty
             if ($value === null || $value === '') {
                 throw new InvalidArgumentException(
                     sprintf('Required argument "%s" cannot be null or empty', $name)
@@ -153,7 +174,6 @@ final class QueryBuilder
             }
             $this->arguments[$name] = $value;
         } elseif ($this->structure->hasDefault($name)) {
-            // Default arguments accept null and empty
             if ($value === null) {
                 $defaults = $this->structure->getDefaults();
                 $this->arguments[$name] = $defaults[$name] ?? '~';
@@ -163,7 +183,6 @@ final class QueryBuilder
                 $this->arguments[$name] = $value;
             }
         } elseif ($this->structure->hasVariadic($name)) {
-            // Variadic arguments
             if ($value === null || $value === '') {
                 $this->arguments[$name] = '~';
             } else {
@@ -250,6 +269,85 @@ final class QueryBuilder
         }
 
         $this->arguments[$name] = $value;
+
+        return $this;
+    }
+
+    /**
+     * Sets a value for an enum argument.
+     *
+     * @param  string  $name  The enum name
+     * @param  string|null  $value  The value (null sets to default or '~')
+     *
+     * @throws InvalidArgumentException If the enum does not exist in the signature
+     */
+    public function setEnum(string $name, ?string $value = null): self
+    {
+        // Vérifier si l'énum existe dans la signature
+        $enumFound = false;
+        $allowedValues = [];
+        $defaultValue = null;
+        $isRequired = false;
+        $isOptional = false;
+
+        $enumToken = '::'.$name.'->';
+        foreach (explode(' ', $this->structure->getRaw()) as $token) {
+            if (str_starts_with($token, $enumToken)) {
+                $enumFound = true;
+                preg_match('/::'.$name.'->\[([^\]]+)\](?:=([^ ]+))?/', $token, $matches);
+                if (isset($matches[1])) {
+                    $allowedValues = array_map('trim', explode(',', $matches[1]));
+                    $allowedValues = array_filter($allowedValues, fn ($v) => $v !== '');
+                }
+                if (isset($matches[2])) {
+                    $defaultPart = $matches[2];
+                    if ($defaultPart === '*') {
+                        $isRequired = true;
+                    } elseif ($defaultPart === '?') {
+                        $isOptional = true;
+                    } else {
+                        $defaultValue = $defaultPart;
+                    }
+                } else {
+                    $isRequired = true;
+                }
+                break;
+            }
+        }
+
+        if (! $enumFound) {
+            throw new InvalidArgumentException(
+                sprintf('Enum "%s" does not exist in signature', $name)
+            );
+        }
+
+        // Valider la valeur
+        if ($value !== null && ! empty($allowedValues) && ! in_array($value, $allowedValues, true)) {
+            throw new InvalidArgumentException(
+                sprintf(
+                    'Invalid value "%s" for enum "%s". Allowed: %s',
+                    $value,
+                    $name,
+                    implode(', ', $allowedValues)
+                )
+            );
+        }
+
+        // Gérer le cas null
+        if ($value === null) {
+            if ($isRequired) {
+                throw new InvalidArgumentException(
+                    sprintf('Required enum "%s" cannot be null', $name)
+                );
+            }
+            if ($isOptional) {
+                $this->enums[$name] = '~';
+            } else {
+                $this->enums[$name] = $defaultValue ?? '~';
+            }
+        } else {
+            $this->enums[$name] = $value;
+        }
 
         return $this;
     }
@@ -403,6 +501,27 @@ final class QueryBuilder
     }
 
     /**
+     * Gets an enum value.
+     *
+     * @param  string  $name  The enum name
+     * @return string|null The value or null if not set
+     */
+    public function getEnum(string $name): ?string
+    {
+        return $this->enums[$name] ?? null;
+    }
+
+    /**
+     * Gets all enums.
+     *
+     * @return array<string, string>
+     */
+    public function getEnums(): array
+    {
+        return $this->enums;
+    }
+
+    /**
      * Resets all arguments to their default values.
      */
     public function reset(): self
@@ -410,8 +529,12 @@ final class QueryBuilder
         $this->arguments = [];
         $this->flags = [];
         $this->customTags = [];
+        $this->enums = [];
 
         foreach ($this->structure->getDefaults() as $name => $defaultValue) {
+            if (str_contains($name, '->[')) {
+                continue;
+            }
             $this->arguments[$name] = $defaultValue ?? '~';
         }
 
@@ -495,8 +618,29 @@ final class QueryBuilder
     {
         $parts = [$this->source];
 
-        // Required arguments first (in order)
+        // ✅ 1. Enums d'abord (après la source, avant tout)
+        foreach ($this->enums as $name => $value) {
+            $parts[] = $value;
+        }
+
+        // ✅ 2. Default enums (si l'énum n'est pas défini dans $this->enums)
+        foreach ($this->structure->getEnums() as $name => $enumData) {
+            // ✅ Si l'énum n'est pas défini dans $this->enums
+            if (! isset($this->enums[$name])) {
+                // ✅ Si l'énum a une valeur par défaut (ni required ni optional)
+                if (! $enumData['is_required'] && ! $enumData['is_optional'] && $enumData['default_value'] !== null && $enumData['default_value'] !== '') {
+                    $parts[] = $enumData['default_value'];
+                }
+                // ✅ Si optional, on ne fait rien
+                // ✅ Si required, on ne fait rien (l'utilisateur doit le fournir)
+            }
+        }
+
+        // ✅ 3. Required arguments (après les enums)
         foreach ($this->structure->getRequireds() as $name) {
+            if ($this->isEnumArgument($name)) {
+                continue;
+            }
             $value = $this->arguments[$name] ?? null;
             if ($value !== null && $value !== '') {
                 $parts[] = $value;
@@ -505,8 +649,11 @@ final class QueryBuilder
             }
         }
 
-        // Default arguments next (in order)
+        // ✅ 4. Default arguments (non enum)
         foreach (array_keys($this->structure->getDefaults()) as $name) {
+            if ($this->isEnumArgument($name)) {
+                continue;
+            }
             $value = $this->arguments[$name] ?? null;
             if ($value !== null && $value !== '') {
                 $parts[] = $value;
@@ -536,6 +683,14 @@ final class QueryBuilder
         }
 
         return implode(' ', $parts);
+    }
+
+    /**
+     * Check if an argument is an enum.
+     */
+    private function isEnumArgument(string $name): bool
+    {
+        return str_contains($this->structure->getRaw(), '::'.$name.'->');
     }
 
     /**
@@ -570,6 +725,7 @@ final class QueryBuilder
         $this->arguments = $this->arguments;
         $this->flags = $this->flags;
         $this->customTags = $this->customTags;
+        $this->enums = $this->enums;
         $this->validated = false;
     }
 }

@@ -194,6 +194,168 @@ final class QueryBuilderTest extends TestCase
         $builder->setVariadic('files', 'file1.txt');
     }
 
+    // ==================== TESTS: setEnum ====================
+
+    public function test_set_enum_sets_value(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+        $builder->setEnum('level', 'master');
+
+        $this->assertSame('master', $builder->getEnum('level'));
+    }
+
+    public function test_set_enum_with_default_value(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+
+        $this->assertNull($builder->getEnum('level'));
+    }
+
+    public function test_set_enum_with_null_on_optional_uses_tilde(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=?');
+        $builder->setEnum('level', null);
+
+        $this->assertSame('~', $builder->getEnum('level'));
+    }
+
+    public function test_set_enum_with_required_throws_exception_on_null(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=*');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Required enum "level" cannot be null');
+
+        $builder->setEnum('level', null);
+    }
+
+    public function test_set_enum_with_nonexistent_enum_throws_exception(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Enum "mode" does not exist in signature');
+
+        $builder->setEnum('mode', 'dev');
+    }
+
+    public function test_set_enum_with_invalid_value_throws_exception(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid value "expert" for enum "level"');
+
+        $builder->setEnum('level', 'expert');
+    }
+
+    public function test_set_enum_with_multiple_enums(): void
+    {
+        $builder = QueryBuilder::init('config ::level->[low,medium,high]=medium ::mode->[dev,staging,prod]=dev');
+        $builder->setEnum('level', 'high');
+        $builder->setEnum('mode', 'staging');
+
+        $enums = $builder->getEnums();
+
+        $this->assertCount(2, $enums);
+        $this->assertSame('high', $enums['level']);
+        $this->assertSame('staging', $enums['mode']);
+    }
+
+    public function test_set_enum_and_build(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle --verbose');
+        $builder->setEnum('level', 'master');
+        $builder->setFlag('--verbose', true);
+
+        $query = $builder->build();
+
+        // ✅ L'énum remplace la valeur par défaut
+        $this->assertSame('set-level master --verbose', $query);
+    }
+
+    public function test_set_enum_with_optional_and_tilde_in_build(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=?');
+        $builder->setEnum('level', null);
+
+        $query = $builder->build();
+
+        // ✅ '~' est ajouté car l'énum est présent mais null
+        $this->assertSame('set-level ~', $query);
+    }
+
+    public function test_set_enum_with_default_uses_default_value(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+
+        $query = $builder->build();
+
+        $this->assertSame('set-level middle', $query);
+    }
+
+    public function test_set_enum_with_required_value(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=*');
+        $builder->setEnum('level', 'beginner');
+
+        $query = $builder->build();
+
+        $this->assertSame('set-level beginner', $query);
+    }
+
+    public function test_get_enum_returns_null_for_nonexistent(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+
+        $this->assertNull($builder->getEnum('nonexistent'));
+    }
+
+    public function test_reset_clears_enums(): void
+    {
+        $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+        $builder->setEnum('level', 'master');
+
+        $builder->reset();
+
+        $this->assertEmpty($builder->getEnums());
+        $this->assertNull($builder->getEnum('level'));
+    }
+
+    public function test_clone_copies_enums(): void
+    {
+        $builder1 = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle');
+        $builder1->setEnum('level', 'master');
+
+        $builder2 = clone $builder1;
+        $builder2->setEnum('level', 'beginner');
+
+        $this->assertSame('master', $builder1->getEnum('level'));
+        $this->assertSame('beginner', $builder2->getEnum('level'));
+    }
+
+    public function test_init_with_initial_query_populates_enums(): void
+    {
+        $builder = QueryBuilder::init(
+            'set-level ::level->[beginner,middle,master]=middle --verbose',
+            'set-level master --verbose'
+        );
+
+        $this->assertSame('master', $builder->getEnum('level'));
+        $this->assertTrue($builder->hasFlag('--verbose'));
+    }
+
+    public function test_init_with_initial_query_without_enums(): void
+    {
+        $builder = QueryBuilder::init(
+            'set-level ::level->[beginner,middle,master]=middle --verbose',
+            'set-level --verbose'
+        );
+
+        $this->assertNull($builder->getEnum('level'));
+        $this->assertTrue($builder->hasFlag('--verbose'));
+    }
+
     // ==================== TESTS: setFlag ====================
 
     public function test_set_flag_sets_value(): void
@@ -751,7 +913,6 @@ final class QueryBuilderTest extends TestCase
 
         $query = $builder->build();
 
-        // Custom tags must be at the end
         $this->assertSame('send John --verbose <greeting="Hello World">', $query);
     }
 }

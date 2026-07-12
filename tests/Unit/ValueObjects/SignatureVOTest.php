@@ -216,6 +216,87 @@ final class SignatureVOTest extends TestCase
         $this->assertFalse($vo->hasFlag('rm'));
     }
 
+    // ==================== ENUM TESTS ====================
+
+    public function test_get_enum(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=middle',
+            'set-level master'
+        );
+
+        $this->assertSame('master', $vo->getEnum('level'));
+        $this->assertNull($vo->getEnum('nonexistent'));
+    }
+
+    public function test_get_enums(): void
+    {
+        $vo = new SignatureVO(
+            'config ::level->[low,medium,high]=medium ::mode->[dev,staging,prod]=dev',
+            'config high staging'
+        );
+
+        $this->assertEquals(
+            ['level' => 'high', 'mode' => 'staging'],
+            $vo->getEnums()
+        );
+    }
+
+    public function test_has_enum(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=middle',
+            'set-level master'
+        );
+
+        $this->assertTrue($vo->hasEnum('level'));
+        $this->assertFalse($vo->hasEnum('nonexistent'));
+    }
+
+    public function test_get_enum_with_default_value(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=middle',
+            'set-level'
+        );
+
+        $this->assertSame('middle', $vo->getEnum('level'));
+    }
+
+    public function test_get_enum_with_optional_and_tilde(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=?',
+            'set-level ~'
+        );
+
+        $this->assertNull($vo->getEnum('level'));
+    }
+
+    public function test_get_enum_with_required(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=*',
+            'set-level beginner'
+        );
+
+        $this->assertSame('beginner', $vo->getEnum('level'));
+    }
+
+    public function test_get_enum_with_multiple_enums(): void
+    {
+        $vo = new SignatureVO(
+            'config ::level->[low,medium,high]=medium ::mode->[dev,staging,prod]=dev ::verbose->[true,false]=false',
+            'config high staging true'
+        );
+
+        $enums = $vo->getEnums();
+        $this->assertCount(3, $enums);
+        $this->assertSame('high', $enums['level']);
+        $this->assertSame('staging', $enums['mode']);
+        $this->assertSame('true', $enums['verbose']);
+    }
+
     // ==================== CUSTOM TAGS TESTS ====================
 
     public function test_get_custom(): void
@@ -337,6 +418,20 @@ final class SignatureVOTest extends TestCase
         $this->assertEquals(['greeting' => 'Hello World'], $parsed->custom_tags->toArray());
     }
 
+    public function test_get_parsed_with_enums(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=middle',
+            'set-level master'
+        );
+
+        $parsed = $vo->getParsed();
+
+        $this->assertInstanceOf(StrictDataObject::class, $parsed);
+        $this->assertEquals('set-level', $parsed->source);
+        $this->assertEquals(['level' => 'master'], $parsed->enums->toArray());
+    }
+
     public function test_get_value(): void
     {
         $vo = new SignatureVO(
@@ -397,12 +492,13 @@ final class SignatureVOTest extends TestCase
 
     public function test_complex_command(): void
     {
-        $signature = 'backup {source} {destination} {format=zip} {output=dist} {excludes*} {purpose*} {--force} {--verbose}';
-        $query = 'backup /var/www /backup tar.gz [cache, logs, tmp] [home, data, models] --force';
+        $signature = 'backup {source} {destination} {format=zip} {output=dist} ::level->[beginner,middle,master]=middle {excludes*} {purpose*} {--force} {--verbose}';
+        $query = 'backup /var/www /backup tar.gz ~ master [cache, logs, tmp] [home, data, models] --force';
 
         $vo = new SignatureVO($signature, $query);
 
         $this->assertSame('backup', $vo->getSource());
+        $this->assertSame('master', $vo->getEnum('level'));
         $this->assertSame('/var/www', $vo->getRequired('source'));
         $this->assertSame('/backup', $vo->getRequired('destination'));
         $this->assertSame('tar.gz', $vo->getDefault('format'));
@@ -475,17 +571,31 @@ final class SignatureVOTest extends TestCase
 
     public function test_command_with_custom_tags_and_all_components(): void
     {
-        $signature = 'deploy {environment} {version=?} {--force}';
-        $query = 'deploy staging --force <user="admin"> <timestamp="2026-07-10">';
+        $signature = 'deploy  {environment} {version=?} ::level->[low,medium,high]=medium  {--force}';
+        $query = 'deploy staging ~ high --force <user="admin"> <timestamp="2026-07-10">';
 
         $vo = new SignatureVO($signature, $query);
 
         $this->assertSame('deploy', $vo->getSource());
+        $this->assertSame('high', $vo->getEnum('level'));
         $this->assertSame('staging', $vo->getRequired('environment'));
         $this->assertNull($vo->getDefault('version'));
         $this->assertTrue($vo->getFlag('force'));
         $this->assertSame('admin', $vo->getCustom('user'));
         $this->assertSame('2026-07-10', $vo->getCustom('timestamp'));
+    }
+
+    public function test_command_with_enum_and_variadic(): void
+    {
+        $signature = 'process ::mode->[fast,slow]=fast {files*} {--verbose}';
+        $query = 'process slow [file1.txt, file2.txt] --verbose';
+
+        $vo = new SignatureVO($signature, $query);
+
+        $this->assertSame('process', $vo->getSource());
+        $this->assertSame('slow', $vo->getEnum('mode'));
+        $this->assertEquals(['file1.txt', 'file2.txt'], $vo->getVariadic('files'));
+        $this->assertTrue($vo->getFlag('verbose'));
     }
 
     // ==================== VALIDATION TESTS ====================
@@ -644,5 +754,63 @@ final class SignatureVOTest extends TestCase
         $this->assertFalse($vo->isValid());
         $this->assertCount(1, $vo->getValidationErrors());
         $this->assertStringContainsString('Unclosed custom tag', $vo->getValidationErrors()->first());
+    }
+
+    public function test_is_valid_returns_true_for_enum_with_valid_value(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=middle',
+            'set-level master'
+        );
+
+        $this->assertTrue($vo->isValid());
+        $this->assertSame('master', $vo->getEnum('level'));
+    }
+
+    public function test_is_valid_returns_false_for_enum_with_invalid_value(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=middle',
+            'set-level expert'
+        );
+
+        $this->assertFalse($vo->isValid());
+        $this->assertCount(1, $vo->getValidationErrors());
+        $this->assertStringContainsString('Invalid value', $vo->getValidationErrors()->first());
+    }
+
+    public function test_is_valid_returns_false_for_enum_required_missing(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=*',
+            'set-level'
+        );
+
+        $this->assertFalse($vo->isValid());
+        $this->assertCount(1, $vo->getValidationErrors());
+        $this->assertStringContainsString('Missing required', $vo->getValidationErrors()->first());
+    }
+
+    public function test_is_valid_returns_true_for_enum_optional_with_tilde(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=?',
+            'set-level ~'
+        );
+
+        $this->assertTrue($vo->isValid());
+        $this->assertNull($vo->getEnum('level'));
+    }
+
+    public function test_is_valid_returns_false_for_enum_tilde_on_required(): void
+    {
+        $vo = new SignatureVO(
+            'set-level ::level->[beginner,middle,master]=*',
+            'set-level ~'
+        );
+
+        $this->assertFalse($vo->isValid());
+        $this->assertCount(1, $vo->getValidationErrors());
+        $this->assertStringContainsString("Cannot use '~'", $vo->getValidationErrors()->first());
     }
 }

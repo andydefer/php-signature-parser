@@ -59,9 +59,9 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     public function __construct()
     {
-        $this->addParser(new EnumParser);      // ✅ Premier parser
         $this->addParser(new SourceParser);
         $this->addParser(new RequiredParser);
+        $this->addParser(new EnumParser);
         $this->addParser(new DefaultParser);
         $this->addParser(new VariadicParser);
         $this->addParser(new FlagParser);

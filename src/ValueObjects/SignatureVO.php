@@ -18,6 +18,8 @@ use InvalidArgumentException;
  * - Source (command name)
  * - Required arguments
  * - Default arguments
+ * - Nullable arguments
+ * - Enum arguments (::name->[values])
  * - Variadic arguments
  * - Boolean flags
  * - Custom tags (<key="value">)
@@ -53,6 +55,11 @@ final class SignatureVO extends AbstractValueObject
      * @var array<string, bool> Boolean flags (name => value)
      */
     private array $flags = [];
+
+    /**
+     * @var array<string, string> Enum arguments (name => value)
+     */
+    private array $enums = [];
 
     /**
      * @var array<string, string> Custom tags (key => value)
@@ -183,6 +190,27 @@ final class SignatureVO extends AbstractValueObject
     }
 
     /**
+     * Returns the value of an enum argument by name.
+     *
+     * @param  string  $name  The enum name
+     * @return string|null The value or null if not found
+     */
+    public function getEnum(string $name): ?string
+    {
+        return $this->enums[$name] ?? null;
+    }
+
+    /**
+     * Returns all enum arguments.
+     *
+     * @return array<string, string> Associative array of enum names to values
+     */
+    public function getEnums(): array
+    {
+        return $this->enums;
+    }
+
+    /**
      * Returns the value of a custom tag by key.
      *
      * @param  string  $key  The tag key
@@ -264,6 +292,17 @@ final class SignatureVO extends AbstractValueObject
     public function hasVariadic(string $name): bool
     {
         return isset($this->variadic[$name]);
+    }
+
+    /**
+     * Checks if an enum argument exists.
+     *
+     * @param  string  $name  The enum name
+     * @return bool True if the enum exists, false otherwise
+     */
+    public function hasEnum(string $name): bool
+    {
+        return isset($this->enums[$name]);
     }
 
     /**
@@ -367,6 +406,12 @@ final class SignatureVO extends AbstractValueObject
             $this->flags[$flag->name] = $flag->value;
         }
 
+        // ✅ Extract enums
+        $this->enums = [];
+        foreach ($result->enum as $enum) {
+            $this->enums[$enum->name] = $enum->value;
+        }
+
         // Extract custom tags from custom_data
         $customData = $result->custom_data->toArray();
         foreach ($customData as $key => $value) {
@@ -379,6 +424,7 @@ final class SignatureVO extends AbstractValueObject
             'default' => $this->default,
             'variadic' => $this->variadic,
             'flags' => $this->flags,
+            'enums' => $this->enums,
             'custom_tags' => $this->customTags,
         ]);
     }
