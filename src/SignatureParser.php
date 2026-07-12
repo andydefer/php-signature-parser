@@ -38,7 +38,7 @@ use InvalidArgumentException;
  * - Required arguments: {name}
  * - Default arguments: {name=value}
  * - Optional arguments: {name=?}
- * - Variadic arguments: {name*}
+ * - Variadic arguments: {name*} or {name*>[value1,value2,value3]} (restricted)
  * - Boolean flags: {--flag}
  * - Enum arguments: ::name->[value1,value2,value3]=default
  * - Custom tags: <key="value">
@@ -323,7 +323,7 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      * 2. Required arguments: {name}
      * 3. Default arguments: {name=value}
      * 4. Optional arguments: {name=?}
-     * 5. Variadic arguments: {name*}
+     * 5. Variadic arguments: {name*} or {name*>[value1,value2]}
      * 6. Flags: {--flag}
      *
      * @return StringTypedCollection The order errors
@@ -409,6 +409,7 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             'enum' => '/^::[a-zA-Z_][a-zA-Z0-9_]*->\[[^\]]+\](?:=[^ ]+)?$/',
             'default' => '/^[a-zA-Z_][a-zA-Z0-9_]*=(?:[^=]+|\?)$/',
             'variadic' => '/^[a-zA-Z_][a-zA-Z0-9_]*\*$/',
+            'variadic_restricted' => '/^[a-zA-Z_][a-zA-Z0-9_]*\*>\s*\[[^\]]*\]\s*$/',
             'flag' => '/^--[a-zA-Z_][a-zA-Z0-9_-]*$/',
             'required' => '/^[a-zA-Z_][a-zA-Z0-9_]*$/',
         ];
@@ -434,7 +435,7 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
 
             if (! $isValid) {
                 $errors->add("Invalid token syntax: '{$element}'");
-                $suggestions->add('Check the syntax: required ({name}), default ({name=value}), variadic ({name*}), flag ({--flag}), enum (::name->[values])');
+                $suggestions->add('Check the syntax: required ({name}), default ({name=value}), variadic ({name*}) or restricted variadic ({name*>[value1,value2]}), flag ({--flag}), enum (::name->[values])');
             }
         }
     }
@@ -454,14 +455,29 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
                 continue;
             }
 
-            // ✅ Normaliser pour les enums aussi
+            // Normaliser pour les enums, flags, variadics, etc.
             $normalizedName = $element;
+
+            // Enlever le préfixe '::' pour les enums
             if (str_starts_with($normalizedName, '::')) {
                 $normalizedName = substr($normalizedName, 2);
             }
+
+            // Enlever le préfixe '--' pour les flags
             $normalizedName = ltrim($normalizedName, '--');
+
+            // Enlever le '*' pour les variadics
             $normalizedName = rtrim($normalizedName, '*');
+
+            // Enlever la partie '>[values]' pour les variadics restreints
+            if (str_contains($normalizedName, '*>')) {
+                $normalizedName = substr($normalizedName, 0, strpos($normalizedName, '*>'));
+            }
+
+            // Enlever la partie '=valeur' pour les defaults
             $normalizedName = explode('=', $normalizedName)[0];
+
+            // Enlever la partie '->[values]' pour les enums
             $normalizedName = explode('->', $normalizedName)[0];
 
             if (isset($seen[$normalizedName])) {
@@ -492,10 +508,18 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         }
 
         $variadic = new VariadicArgumentCollection;
-        foreach ($data['variadic'] ?? [] as $name => $values) {
+        $variadicData = $data['variadic'] ?? [];
+        foreach ($variadicData as $name => $values) {
+            // Vérifier si des restrictions sont stockées séparément
+            $restrictions = new StringTypedCollection;
+            if (isset($data['variadic_restrictions'][$name])) {
+                $restrictions = StringTypedCollection::from($data['variadic_restrictions'][$name]);
+            }
+
             $variadic->add(new VariadicArgumentRecord(
                 $name,
-                StringTypedCollection::from($values)
+                StringTypedCollection::from($values),
+                $restrictions
             ));
         }
 
@@ -504,7 +528,7 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             $flags->add(new FlagRecord($name, $value));
         }
 
-        // ✅ Build EnumCollection
+        // Build EnumCollection
         $enum = new EnumCollection;
         foreach ($data['enum'] ?? [] as $name => $enumData) {
             $enum->add(new EnumRecord(
@@ -516,7 +540,7 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             ));
         }
 
-        $standardKeys = ['source', 'required', 'default', 'variadic', 'flags', 'enum'];
+        $standardKeys = ['source', 'required', 'default', 'variadic', 'variadic_restrictions', 'flags', 'enum'];
         $customData = array_filter(
             $data,
             fn ($key) => ! in_array($key, $standardKeys, true),
