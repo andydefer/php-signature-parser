@@ -15,5 +15,6 @@ final class VariadicArgumentRecord extends AbstractRecord
     public function __construct(
         public readonly string $name,
         public readonly StringTypedCollection $values,
+        public readonly StringTypedCollection $restrictions = new StringTypedCollection,
     ) {}
 }

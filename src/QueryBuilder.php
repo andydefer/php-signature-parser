@@ -425,7 +425,7 @@ final class QueryBuilder
     /**
      * Sets multiple custom tags at once.
      *
-     * @param  array<string, string>  $tags  Associative array of key => value
+     * @param  array<string, string>  $tags  StrictAssociative array of key => value
      */
     public function setCustoms(array $tags): self
     {

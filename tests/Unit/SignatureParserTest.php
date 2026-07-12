@@ -1033,4 +1033,436 @@ final class SignatureParserTest extends TestCase
         $this->assertSame(['low', 'medium', 'high'], $fullArray[0]['allowed_values']);
         $this->assertSame('medium', $fullArray[0]['default_value']);
     }
+
+    // ==================== RESTRICTED VARIADIC TESTS ====================
+
+    public function test_parse_restricted_variadic_with_valid_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [admin,editor]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertCount(1, $result->variadic);
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+    }
+
+    public function test_parse_restricted_variadic_with_single_value(): void
+    {
+        $signature = 'command {format*>[json,xml,yaml]}';
+        $query = 'command [json]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertCount(1, $result->variadic);
+        $this->assertSame(['json'], $result->variadic->first()->values->toArray());
+    }
+
+    public function test_parse_restricted_variadic_with_empty_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command []';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertCount(1, $result->variadic);
+        $this->assertSame([], $result->variadic->first()->values->toArray());
+    }
+
+    public function test_parse_restricted_variadic_with_spaces_in_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [admin, editor]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+    }
+
+    public function test_parse_restricted_variadic_with_flags(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]} {--verbose}';
+        $query = 'command [admin,editor] --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertTrue($result->flags->first()->value);
+    }
+
+    public function test_parse_restricted_variadic_with_custom_tags(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]} {--verbose}';
+        $query = 'command [admin] --verbose <user="admin">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
+        $this->assertTrue($result->flags->first()->value);
+
+        $data = $result->custom_data->toArray();
+        $this->assertArrayHasKey('user', $data);
+        $this->assertSame('admin', $data['user']);
+    }
+
+    public function test_parse_multiple_restricted_variadics(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]} {format*>[json,xml,yaml]}';
+        $query = 'command [admin,editor] [json]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertCount(2, $result->variadic);
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertSame(['json'], $result->variadic->last()->values->toArray());
+    }
+
+    public function test_parse_mixed_variadic_types(): void
+    {
+        $signature = 'command {roles*>[admin,editor]} {tags*} {--verbose}';
+        $query = 'command [admin] [tag1,tag2] --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertCount(2, $result->variadic);
+        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
+        $this->assertSame(['tag1', 'tag2'], $result->variadic->last()->values->toArray());
+        $this->assertTrue($result->flags->first()->value);
+    }
+
+    public function test_parse_restricted_variadic_with_underscores_in_name(): void
+    {
+        $signature = 'command {user_role*>[admin,editor,viewer]}';
+        $query = 'command [admin,editor]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertCount(1, $result->variadic);
+        $this->assertSame('user_role', $result->variadic->first()->name);
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+    }
+
+    public function test_parse_restricted_variadic_throws_exception_on_invalid_value(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Value "guest" not allowed for "roles"');
+
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [admin,guest]';
+
+        $this->parser->parse($signature, $query);
+    }
+
+    public function test_parse_restricted_variadic_throws_exception_on_multiple_invalid_values(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Value "guest" not allowed for "roles"');
+
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [guest,unknown]';
+
+        $this->parser->parse($signature, $query);
+    }
+
+    public function test_parse_restricted_variadic_with_empty_restrictions(): void
+    {
+        $signature = 'command {roles*>[]}';
+        $query = 'command [admin,editor]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertCount(1, $result->variadic);
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+    }
+
+    // ==================== RESTRICTED VARIADIC VALIDATION TESTS ====================
+
+    public function test_validate_restricted_variadic_returns_valid_for_valid_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [admin,editor]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_restricted_variadic_returns_valid_for_single_value(): void
+    {
+        $signature = 'command {format*>[json,xml,yaml]}';
+        $query = 'command [json]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_restricted_variadic_returns_valid_for_empty_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command []';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_restricted_variadic_returns_valid_for_spaces_in_query(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [admin, editor]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_restricted_variadic_returns_invalid_for_invalid_value(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [admin,guest]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Value 'guest' not allowed for 'roles'", $result->errors->first());
+        $this->assertStringContainsString('admin, editor, viewer', $result->suggestions->first());
+    }
+
+    public function test_validate_restricted_variadic_returns_invalid_for_multiple_invalid_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [guest,unknown]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertGreaterThanOrEqual(1, $result->errors->count());
+    }
+
+    public function test_validate_restricted_variadic_returns_invalid_for_empty_allowed_values(): void
+    {
+        $signature = 'command {roles*>[]}';
+        $query = 'command [admin]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('no allowed values', $result->errors->first());
+    }
+
+    public function test_validate_restricted_variadic_returns_invalid_for_invalid_single_value(): void
+    {
+        $signature = 'command {format*>[json,xml,yaml]}';
+        $query = 'command [html]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Value 'html' not allowed for 'format'", $result->errors->first());
+        $this->assertStringContainsString('json, xml, yaml', $result->suggestions->first());
+    }
+
+    public function test_validate_multiple_restricted_variadics_passes_with_valid_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor]} {format*>[json,xml]}';
+        $query = 'command [admin,editor] [json]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_multiple_restricted_variadics_fails_with_invalid_values(): void
+    {
+        $signature = 'command {roles*>[admin,editor]} {format*>[json,xml]}';
+        $query = 'command [admin,guest] [html]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertGreaterThanOrEqual(1, $result->errors->count());
+        $this->assertStringContainsString("Value 'guest' not allowed for 'roles'", $result->errors->first());
+    }
+
+    public function test_validate_mixed_variadic_types_passes(): void
+    {
+        $signature = 'command {roles*>[admin,editor]} {tags*} {--verbose}';
+        $query = 'command [admin] [tag1,tag2] --verbose';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_mixed_variadic_types_fails_on_restricted(): void
+    {
+        $signature = 'command {roles*>[admin,editor]} {tags*} {--verbose}';
+        $query = 'command [guest] [tag1,tag2] --verbose';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Value 'guest' not allowed for 'roles'", $result->errors->first());
+    }
+
+    public function test_validate_restricted_variadic_returns_invalid_for_empty_value_in_list(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}';
+        $query = 'command [admin, , editor]';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('Empty value', $result->errors->first());
+    }
+
+    // ==================== SIGNATURE VALIDATION FOR RESTRICTED VARIADICS ====================
+
+    public function test_signature_validation_passes_for_restricted_variadic(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]} {--verbose}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_signature_validation_passes_for_multiple_restricted_variadics(): void
+    {
+        $signature = 'command {roles*>[admin,editor]} {format*>[json,xml]}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_signature_validation_passes_for_mixed_variadics(): void
+    {
+        $signature = 'command {roles*>[admin,editor]} {tags*}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_signature_validation_passes_for_restricted_variadic_with_spaces(): void
+    {
+        $signature = 'command {roles*>[admin, editor, viewer]}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_signature_validation_passes_for_restricted_variadic_with_empty_allowed(): void
+    {
+        $signature = 'command {roles*>[]}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_signature_validation_fails_for_restricted_variadic_without_star(): void
+    {
+        $signature = 'command {roles>[admin,editor]}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('Invalid token syntax', $result->errors->first());
+    }
+
+    public function test_signature_validation_fails_for_restricted_variadic_with_invalid_name(): void
+    {
+        $signature = 'command {123roles*>[admin,editor]}';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('Invalid token syntax', $result->errors->first());
+    }
+
+    // ==================== RESTRICTED VARIADIC WITH OTHER COMPONENTS ====================
+
+    public function test_parse_signature_with_restricted_variadic_and_required_args(): void
+    {
+        $signature = 'command {source} {roles*>[admin,editor,viewer]} {--verbose}';
+        $query = 'command /var/www [admin,editor] --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('/var/www', $result->required->first()->value);
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertTrue($result->flags->first()->value);
+    }
+
+    public function test_parse_signature_with_restricted_variadic_and_default_args(): void
+    {
+        $signature = 'command {format=zip} {roles*>[admin,editor,viewer]}';
+        $query = 'command tar.gz [admin]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('tar.gz', $result->default->first()->value);
+        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
+    }
+
+    public function test_parse_signature_with_restricted_variadic_and_enum(): void
+    {
+        $signature = 'command ::level->[low,medium,high]=medium {roles*>[admin,editor,viewer]}';
+        $query = 'command high [admin,editor]';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('high', $result->enum->get('level'));
+        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+    }
+
+    public function test_validate_restricted_variadic_works_with_all_components(): void
+    {
+        $signature = 'command {source} {format=zip} ::level->[low,high]=low {roles*>[admin,editor]} {--verbose}';
+        $query = 'command /var/www tar.gz high [admin] --verbose';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_restricted_variadic_fails_with_all_components(): void
+    {
+        $signature = 'command {source} {format=zip} ::level->[low,high]=low {roles*>[admin,editor]} {--verbose}';
+        $query = 'command /var/www tar.gz high [guest] --verbose';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Value 'guest' not allowed for 'roles'", $result->errors->first());
+    }
 }

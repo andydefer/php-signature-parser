@@ -119,7 +119,7 @@ final class SignatureVO extends AbstractValueObject
     /**
      * Returns all required arguments.
      *
-     * @return array<string, string> Associative array of argument names to values
+     * @return array<string, string> StrictAssociative array of argument names to values
      */
     public function getRequireds(): array
     {
@@ -140,7 +140,7 @@ final class SignatureVO extends AbstractValueObject
     /**
      * Returns all default arguments.
      *
-     * @return array<string, string|null> Associative array of argument names to values
+     * @return array<string, string|null> StrictAssociative array of argument names to values
      */
     public function getDefaults(): array
     {
@@ -161,7 +161,7 @@ final class SignatureVO extends AbstractValueObject
     /**
      * Returns all variadic arguments.
      *
-     * @return array<string, array<string>> Associative array of argument names to value arrays
+     * @return array<string, array<string>> StrictAssociative array of argument names to value arrays
      */
     public function getVariadics(): array
     {
@@ -182,7 +182,7 @@ final class SignatureVO extends AbstractValueObject
     /**
      * Returns all flags.
      *
-     * @return array<string, bool> Associative array of flag names to boolean values
+     * @return array<string, bool> StrictAssociative array of flag names to boolean values
      */
     public function getFlags(): array
     {
@@ -203,7 +203,7 @@ final class SignatureVO extends AbstractValueObject
     /**
      * Returns all enum arguments.
      *
-     * @return array<string, string> Associative array of enum names to values
+     * @return array<string, string> StrictAssociative array of enum names to values
      */
     public function getEnums(): array
     {
@@ -224,7 +224,7 @@ final class SignatureVO extends AbstractValueObject
     /**
      * Returns all custom tags.
      *
-     * @return array<string, string> Associative array of tag keys to values
+     * @return array<string, string> StrictAssociative array of tag keys to values
      */
     public function getCustoms(): array
     {
