@@ -271,9 +271,9 @@ final class SignatureStructureVOTest extends TestCase
 
         $this->assertInstanceOf(StrictDataObject::class, $value);
         $this->assertEquals('backup', $value->source);
-        $this->assertEquals(['source'], $value->required);
-        $this->assertEquals(['format' => 'zip', 'output' => null], $value->default->toArray());
-        $this->assertEquals(['excludes'], $value->variadic);
+        $this->assertEquals(['source'], $value->requireds);
+        $this->assertEquals(['format' => 'zip', 'output' => null], $value->defaults->toArray());
+        $this->assertEquals(['excludes'], $value->variadics);
         $this->assertEquals(['force'], $value->flags);
         $this->assertArrayHasKey('level', $value->enums);
         $this->assertEquals(['beginner', 'middle', 'master'], $value->enums['level']['allowed_values']);

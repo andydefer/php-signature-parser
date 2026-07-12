@@ -27,11 +27,11 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('level', $data['enum']);
-        $this->assertSame('master', $data['enum']['level']['value']);
-        $this->assertSame(['beginner', 'middle', 'master'], $data['enum']['level']['allowed_values']);
-        $this->assertSame('middle', $data['enum']['level']['default_value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('level', $data['enums']);
+        $this->assertSame('master', $data['enums']['level']['value']);
+        $this->assertSame(['beginner', 'middle', 'master'], $data['enums']['level']['allowed_values']);
+        $this->assertSame('middle', $data['enums']['level']['default_value']);
         $this->assertSame(['set-level'], $result->signature->toArray());
         $this->assertSame(['set-level'], $result->query->toArray());
     }
@@ -44,9 +44,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('level', $data['enum']);
-        $this->assertSame('middle', $data['enum']['level']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('level', $data['enums']);
+        $this->assertSame('middle', $data['enums']['level']['value']);
         $this->assertSame(['set-level'], $result->query->toArray());
     }
 
@@ -58,9 +58,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('level', $data['enum']);
-        $this->assertNull($data['enum']['level']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('level', $data['enums']);
+        $this->assertNull($data['enums']['level']['value']);
         $this->assertSame(['set-level'], $result->query->toArray());
     }
 
@@ -72,9 +72,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('level', $data['enum']);
-        $this->assertSame('beginner', $data['enum']['level']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('level', $data['enums']);
+        $this->assertSame('beginner', $data['enums']['level']['value']);
         $this->assertSame(['set-level'], $result->query->toArray());
     }
 
@@ -101,11 +101,11 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('level', $data['enum']);
-        $this->assertSame('high', $data['enum']['level']['value']);
-        $this->assertArrayHasKey('mode', $data['enum']);
-        $this->assertSame('staging', $data['enum']['mode']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('level', $data['enums']);
+        $this->assertSame('high', $data['enums']['level']['value']);
+        $this->assertArrayHasKey('mode', $data['enums']);
+        $this->assertSame('staging', $data['enums']['mode']['value']);
         $this->assertSame(['config'], $result->query->toArray());
         $this->assertSame(['config'], $result->signature->toArray());
     }
@@ -122,9 +122,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('env', $data['enum']);
-        $this->assertSame('prod', $data['enum']['env']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('env', $data['enums']);
+        $this->assertSame('prod', $data['enums']['env']['value']);
         $this->assertSame(['deploy', '--force'], $result->signature->toArray());
         $this->assertSame(['deploy', '--force'], $result->query->toArray());
     }
@@ -141,9 +141,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('priority', $data['enum']);
-        $this->assertSame('high', $data['enum']['priority']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('priority', $data['enums']);
+        $this->assertSame('high', $data['enums']['priority']['value']);
         $this->assertSame(['send', '--verbose', '<user="admin">'], $result->query->toArray());
         $this->assertSame(['send', '--verbose'], $result->signature->toArray());
     }
@@ -156,9 +156,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('env', $data['enum']);
-        $this->assertSame('staging', $data['enum']['env']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('env', $data['enums']);
+        $this->assertSame('staging', $data['enums']['env']['value']);
         $this->assertSame(['deploy', '{environment}'], $result->signature->toArray());
         $this->assertSame(['deploy', 'prod'], $result->query->toArray());
     }
@@ -320,10 +320,10 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('level', $data['enum']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('level', $data['enums']);
         // ✅ Les valeurs vides doivent être filtrées
-        $this->assertSame(['a', 'b'], $data['enum']['level']['allowed_values']);
+        $this->assertSame(['a', 'b'], $data['enums']['level']['allowed_values']);
     }
 
     public function test_parse_with_single_allowed_value(): void
@@ -334,10 +334,10 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('single', $data['enum']);
-        $this->assertSame('only', $data['enum']['single']['value']);
-        $this->assertSame(['only'], $data['enum']['single']['allowed_values']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('single', $data['enums']);
+        $this->assertSame('only', $data['enums']['single']['value']);
+        $this->assertSame(['only'], $data['enums']['single']['allowed_values']);
     }
 
     public function test_parse_with_enum_name_containing_underscores(): void
@@ -348,9 +348,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('user_level', $data['enum']);
-        $this->assertSame('master', $data['enum']['user_level']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('user_level', $data['enums']);
+        $this->assertSame('master', $data['enums']['user_level']['value']);
     }
 
     public function test_parse_with_enum_containing_numbers(): void
@@ -361,9 +361,9 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertArrayHasKey('level', $data['enum']);
-        $this->assertSame('level2', $data['enum']['level']['value']);
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('level', $data['enums']);
+        $this->assertSame('level2', $data['enums']['level']['value']);
     }
 
     public function test_validate_with_multiple_errors(): void
@@ -392,8 +392,8 @@ final class EnumParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $data = $result->data->toArray();
-        $this->assertArrayHasKey('enum', $data);
-        $this->assertEmpty($data['enum']);  // ✅ Vérifier que enum est vide
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertEmpty($data['enums']);  // ✅ Vérifier que enum est vide
         $this->assertSame($signature, $result->signature->toArray());
         $this->assertSame($query, $result->query->toArray());
     }

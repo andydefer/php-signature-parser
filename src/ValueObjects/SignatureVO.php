@@ -39,17 +39,17 @@ final class SignatureVO extends AbstractValueObject
     /**
      * @var array<string, string> Required arguments (name => value)
      */
-    private array $required = [];
+    private array $requireds = [];
 
     /**
      * @var array<string, string|null> Default arguments (name => value)
      */
-    private array $default = [];
+    private array $defaults = [];
 
     /**
      * @var array<string, array<string>> Variadic arguments (name => array of values)
      */
-    private array $variadic = [];
+    private array $variadics = [];
 
     /**
      * @var array<string, bool> Boolean flags (name => value)
@@ -64,11 +64,13 @@ final class SignatureVO extends AbstractValueObject
     /**
      * @var array<string, string> Custom tags (key => value)
      */
-    private array $customTags = [];
+    private array $custom_tags = [];
+
+    private string $source;
 
     private StrictDataObject $parsed;
 
-    private ValidationResultRecord $validationResult;
+    private ValidationResultRecord $validation_result;
 
     /**
      * Constructs a new SignatureVO instance.
@@ -113,7 +115,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getRequired(string $name): ?string
     {
-        return $this->required[$name] ?? null;
+        return $this->requireds[$name] ?? null;
     }
 
     /**
@@ -123,7 +125,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getRequireds(): array
     {
-        return $this->required;
+        return $this->requireds;
     }
 
     /**
@@ -134,7 +136,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getDefault(string $name): ?string
     {
-        return $this->default[$name] ?? null;
+        return $this->defaults[$name] ?? null;
     }
 
     /**
@@ -144,7 +146,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getDefaults(): array
     {
-        return $this->default;
+        return $this->defaults;
     }
 
     /**
@@ -155,7 +157,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getVariadic(string $name): array
     {
-        return $this->variadic[$name] ?? [];
+        return $this->variadics[$name] ?? [];
     }
 
     /**
@@ -165,7 +167,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getVariadics(): array
     {
-        return $this->variadic;
+        return $this->variadics;
     }
 
     /**
@@ -218,7 +220,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getCustom(string $key): ?string
     {
-        return $this->customTags[$key] ?? null;
+        return $this->custom_tags[$key] ?? null;
     }
 
     /**
@@ -228,7 +230,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getCustoms(): array
     {
-        return $this->customTags;
+        return $this->custom_tags;
     }
 
     /**
@@ -239,7 +241,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function hasCustom(string $key): bool
     {
-        return isset($this->customTags[$key]);
+        return isset($this->custom_tags[$key]);
     }
 
     /**
@@ -269,7 +271,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function hasRequired(string $name): bool
     {
-        return isset($this->required[$name]);
+        return isset($this->requireds[$name]);
     }
 
     /**
@@ -280,7 +282,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function hasDefault(string $name): bool
     {
-        return isset($this->default[$name]);
+        return isset($this->defaults[$name]);
     }
 
     /**
@@ -291,7 +293,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function hasVariadic(string $name): bool
     {
-        return isset($this->variadic[$name]);
+        return isset($this->variadics[$name]);
     }
 
     /**
@@ -312,7 +314,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function hasCustoms(): bool
     {
-        return $this->customTags !== [];
+        return $this->custom_tags !== [];
     }
 
     /**
@@ -322,7 +324,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function isValid(): bool
     {
-        return $this->validationResult->isValid;
+        return $this->validation_result->isValid;
     }
 
     /**
@@ -332,7 +334,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getValidationErrors(): StringTypedCollection
     {
-        return $this->validationResult->errors;
+        return $this->validation_result->errors;
     }
 
     /**
@@ -342,7 +344,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getValidationSuggestions(): StringTypedCollection
     {
-        return $this->validationResult->suggestions;
+        return $this->validation_result->suggestions;
     }
 
     /**
@@ -352,7 +354,7 @@ final class SignatureVO extends AbstractValueObject
      */
     public function getValidationResult(): ValidationResultRecord
     {
-        return $this->validationResult;
+        return $this->validation_result;
     }
 
     /**
@@ -386,19 +388,19 @@ final class SignatureVO extends AbstractValueObject
 
         $this->source = $result->source;
 
-        $this->required = [];
-        foreach ($result->required as $arg) {
-            $this->required[$arg->name] = $arg->value;
+        $this->requireds = [];
+        foreach ($result->requireds as $arg) {
+            $this->requireds[$arg->name] = $arg->value;
         }
 
-        $this->default = [];
-        foreach ($result->default as $arg) {
-            $this->default[$arg->name] = $arg->value;
+        $this->defaults = [];
+        foreach ($result->defaults as $arg) {
+            $this->defaults[$arg->name] = $arg->value;
         }
 
-        $this->variadic = [];
-        foreach ($result->variadic as $arg) {
-            $this->variadic[$arg->name] = $arg->values->toArray();
+        $this->variadics = [];
+        foreach ($result->variadics as $arg) {
+            $this->variadics[$arg->name] = $arg->values->toArray();
         }
 
         $this->flags = [];
@@ -406,26 +408,25 @@ final class SignatureVO extends AbstractValueObject
             $this->flags[$flag->name] = $flag->value;
         }
 
-        // ✅ Extract enums
         $this->enums = [];
-        foreach ($result->enum as $enum) {
+        foreach ($result->enums as $enum) {
             $this->enums[$enum->name] = $enum->value;
         }
 
         // Extract custom tags from custom_data
         $customData = $result->custom_data->toArray();
         foreach ($customData as $key => $value) {
-            $this->customTags[$key] = $value;
+            $this->custom_tags[$key] = $value;
         }
 
         $this->parsed = new StrictDataObject([
             'source' => $this->source,
-            'required' => $this->required,
-            'default' => $this->default,
-            'variadic' => $this->variadic,
+            'requireds' => $this->requireds,
+            'defaults' => $this->defaults,
+            'variadics' => $this->variadics,
             'flags' => $this->flags,
             'enums' => $this->enums,
-            'custom_tags' => $this->customTags,
+            'custom_tags' => $this->custom_tags,
         ]);
     }
 
@@ -435,8 +436,6 @@ final class SignatureVO extends AbstractValueObject
     private function validate(): void
     {
         $parser = new SignatureParser;
-        $this->validationResult = $parser->validate($this->signature, $this->query);
+        $this->validation_result = $parser->validate($this->signature, $this->query);
     }
-
-    private string $source;
 }

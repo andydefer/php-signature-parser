@@ -18,7 +18,7 @@ use AndyDefer\SignatureParser\Records\ValidationResultRecord;
  * @example
  * Signature: '{source} {destination}'
  * Query: '/var/www /backup'
- * Result: ['source' => '/var/www', 'destination' => '/backup']
+ * Result: ['requireds' => ['source' => '/var/www', 'destination' => '/backup']]
  */
 final class RequiredParser implements ParserInterface
 {
@@ -29,7 +29,7 @@ final class RequiredParser implements ParserInterface
      */
     public function parse(array $signature, array $query): ParsedResultRecord
     {
-        $required = [];
+        $requireds = [];
         $remainingSignature = [];
         $remainingQuery = [];
         $queryIndex = 0;
@@ -37,7 +37,7 @@ final class RequiredParser implements ParserInterface
 
         foreach ($signature as $element) {
             if ($this->isRequiredArgument($element)) {
-                $required[$element] = $query[$queryIndex] ?? '';
+                $requireds[$element] = $query[$queryIndex] ?? '';
                 $queryIndex++;
             } else {
                 $remainingSignature[] = $element;
@@ -51,7 +51,7 @@ final class RequiredParser implements ParserInterface
         }
 
         return ParsedResultRecord::from([
-            'data' => ['required' => $required],
+            'data' => ['requireds' => $requireds],
             'signature' => $remainingSignature,
             'query' => $remainingQuery,
         ]);

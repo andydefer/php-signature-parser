@@ -31,12 +31,12 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertSame('/var/www', $result->required->first()->value);
-        $this->assertSame('/backup', $result->required->last()->value);
-        $this->assertSame('tar.gz', $result->default->first()->value);
-        $this->assertSame('dist', $result->default->last()->value);
-        $this->assertSame(['cache', 'logs', 'tmp'], $result->variadic->first()->values->toArray());
-        $this->assertSame(['home', 'data', 'models'], $result->variadic->last()->values->toArray());
+        $this->assertSame('/var/www', $result->requireds->first()->value);
+        $this->assertSame('/backup', $result->requireds->last()->value);
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertSame('dist', $result->defaults->last()->value);
+        $this->assertSame(['cache', 'logs', 'tmp'], $result->variadics->first()->values->toArray());
+        $this->assertSame(['home', 'data', 'models'], $result->variadics->last()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
         $this->assertFalse($result->flags->last()->value);
     }
@@ -48,8 +48,8 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('John Doe', $result->required->first()->value);
-        $this->assertSame('john@example.com', $result->required->last()->value);
+        $this->assertSame('John Doe', $result->requireds->first()->value);
+        $this->assertSame('john@example.com', $result->requireds->last()->value);
     }
 
     public function test_replaces_caret_with_space_in_default_arguments(): void
@@ -59,8 +59,8 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('tar gz', $result->default->first()->value);
-        $this->assertSame('build folder', $result->default->last()->value);
+        $this->assertSame('tar gz', $result->defaults->first()->value);
+        $this->assertSame('build folder', $result->defaults->last()->value);
     }
 
     public function test_replaces_caret_with_space_in_variadic_arguments(): void
@@ -70,7 +70,7 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $values = $result->variadic->first()->values->toArray();
+        $values = $result->variadics->first()->values->toArray();
         $this->assertSame(['file 1.txt', 'file 2.txt', 'my file 3.txt'], $values);
     }
 
@@ -81,10 +81,10 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('/home/user/My Project', $result->required->first()->value);
-        $this->assertSame('/backup', $result->required->last()->value);
-        $this->assertSame('tar gz', $result->default->first()->value);
-        $this->assertSame(['cache folder', 'logs folder'], $result->variadic->first()->values->toArray());
+        $this->assertSame('/home/user/My Project', $result->requireds->first()->value);
+        $this->assertSame('/backup', $result->requireds->last()->value);
+        $this->assertSame('tar gz', $result->defaults->first()->value);
+        $this->assertSame(['cache folder', 'logs folder'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -95,8 +95,8 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('John', $result->required->first()->value);
-        $this->assertSame('john@example.com', $result->required->last()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame('john@example.com', $result->requireds->last()->value);
     }
 
     public function test_replaces_multiple_carets_in_same_value(): void
@@ -106,7 +106,7 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('John Michael Doe', $result->required->first()->value);
+        $this->assertSame('John Michael Doe', $result->requireds->first()->value);
     }
 
     public function test_extracts_signature_elements(): void
@@ -135,10 +135,10 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertSame('/var/www', $result->required->first()->value);
-        $this->assertSame('/backup', $result->required->last()->value);
-        $this->assertCount(0, $result->default);
-        $this->assertCount(0, $result->variadic);
+        $this->assertSame('/var/www', $result->requireds->first()->value);
+        $this->assertSame('/backup', $result->requireds->last()->value);
+        $this->assertCount(0, $result->defaults);
+        $this->assertCount(0, $result->variadics);
         $this->assertCount(0, $result->flags);
     }
 
@@ -150,8 +150,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertSame('tar.gz', $result->default->first()->value);
-        $this->assertSame('dist', $result->default->last()->value);
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertSame('dist', $result->defaults->last()->value);
     }
 
     public function test_parses_with_only_flags(): void
@@ -174,7 +174,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertSame(['cache', 'logs', 'tmp'], $result->variadic->first()->values->toArray());
+        $this->assertSame(['cache', 'logs', 'tmp'], $result->variadics->first()->values->toArray());
     }
 
     public function test_handles_empty_query(): void
@@ -185,9 +185,9 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertSame('', $result->required->first()->value);
-        $this->assertSame('', $result->required->last()->value);
-        $this->assertSame('zip', $result->default->first()->value);
+        $this->assertSame('', $result->requireds->first()->value);
+        $this->assertSame('', $result->requireds->last()->value);
+        $this->assertSame('zip', $result->defaults->first()->value);
         $this->assertFalse($result->flags->first()->value);
     }
 
@@ -199,7 +199,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('deploy', $result->source);
-        $this->assertSame('staging', $result->default->first()->value);
+        $this->assertSame('staging', $result->defaults->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -409,9 +409,9 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('process', $result->source);
-        $this->assertSame('build', $result->required->first()->value);
-        $this->assertSame('tar.gz', $result->default->first()->value);
-        $this->assertSame(['file1', 'file2'], $result->variadic->first()->values->toArray());
+        $this->assertSame('build', $result->requireds->first()->value);
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertSame(['file1', 'file2'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -597,7 +597,7 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('goodby', $data['later']);
 
         $this->assertSame('send', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -611,7 +611,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('send', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
 
         $data = $result->custom_data->toArray();
@@ -627,7 +627,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('deploy', $result->source);
-        $this->assertSame('staging', $result->required->first()->value);
+        $this->assertSame('staging', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
 
         $data = $result->custom_data->toArray();
@@ -645,7 +645,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('process', $result->source);
-        $this->assertCount(2, $result->variadic->first()->values);
+        $this->assertCount(2, $result->variadics->first()->values);
         $this->assertTrue($result->flags->first()->value);
 
         $data = $result->custom_data->toArray();
@@ -661,8 +661,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertSame('/var/www', $result->required->first()->value);
-        $this->assertSame('zip', $result->default->first()->value);
+        $this->assertSame('/var/www', $result->requireds->first()->value);
+        $this->assertSame('zip', $result->defaults->first()->value);
         $this->assertTrue($result->flags->first()->value);
 
         $data = $result->custom_data->toArray();
@@ -678,9 +678,9 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('version', $result->source);
-        $this->assertEmpty($result->required);
-        $this->assertEmpty($result->default);
-        $this->assertEmpty($result->variadic);
+        $this->assertEmpty($result->requireds);
+        $this->assertEmpty($result->defaults);
+        $this->assertEmpty($result->variadics);
         $this->assertEmpty($result->flags);
 
         $data = $result->custom_data->toArray();
@@ -698,7 +698,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('send', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
 
         $data = $result->custom_data->toArray();
@@ -740,9 +740,9 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('set-level', $result->source);
-        $this->assertNotEmpty($result->enum);
-        $this->assertSame('master', $result->enum->get('level'));
-        $this->assertSame(['beginner', 'middle', 'master'], $result->enum->getAllowedValues('level'));
+        $this->assertNotEmpty($result->enums);
+        $this->assertSame('master', $result->enums->get('level'));
+        $this->assertSame(['beginner', 'middle', 'master'], $result->enums->getAllowedValues('level'));
     }
 
     public function test_parse_enum_with_default_value_when_not_provided(): void
@@ -753,7 +753,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('set-level', $result->source);
-        $this->assertSame('middle', $result->enum->get('level'));
+        $this->assertSame('middle', $result->enums->get('level'));
     }
 
     public function test_parse_enum_with_optional_and_tilde(): void
@@ -764,7 +764,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('set-level', $result->source);
-        $this->assertNull($result->enum->get('level'));
+        $this->assertNull($result->enums->get('level'));
     }
 
     public function test_parse_enum_with_required(): void
@@ -775,7 +775,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('set-level', $result->source);
-        $this->assertSame('beginner', $result->enum->get('level'));
+        $this->assertSame('beginner', $result->enums->get('level'));
     }
 
     public function test_parse_multiple_enums(): void
@@ -786,8 +786,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('config', $result->source);
-        $this->assertSame('high', $result->enum->get('level'));
-        $this->assertSame('staging', $result->enum->get('mode'));
+        $this->assertSame('high', $result->enums->get('level'));
+        $this->assertSame('staging', $result->enums->get('mode'));
     }
 
     public function test_parse_enum_with_flags(): void
@@ -798,7 +798,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('deploy', $result->source);
-        $this->assertSame('prod', $result->enum->get('env'));
+        $this->assertSame('prod', $result->enums->get('env'));
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -810,7 +810,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('send', $result->source);
-        $this->assertSame('high', $result->enum->get('priority'));
+        $this->assertSame('high', $result->enums->get('priority'));
         $this->assertTrue($result->flags->first()->value);
 
         $data = $result->custom_data->toArray();
@@ -825,7 +825,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('set-level', $result->source);
-        $this->assertNull($result->enum->get('level'));
+        $this->assertNull($result->enums->get('level'));
     }
 
     public function test_parse_enum_with_invalid_value_uses_default(): void
@@ -836,7 +836,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('set-level', $result->source);
-        $this->assertSame('middle', $result->enum->get('level'));
+        $this->assertSame('middle', $result->enums->get('level'));
     }
 
     public function test_enum_parser_removes_enum_token_from_signature(): void
@@ -935,7 +935,7 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $enum = $result->enum;
+        $enum = $result->enums;
 
         $this->assertTrue($enum->has('level'));
         $this->assertTrue($enum->has('mode'));
@@ -976,9 +976,9 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertTrue($result->enum->isRequired('level'));
-        $this->assertFalse($result->enum->isOptional('level'));
-        $this->assertFalse($result->enum->hasDefault('level'));
+        $this->assertTrue($result->enums->isRequired('level'));
+        $this->assertFalse($result->enums->isOptional('level'));
+        $this->assertFalse($result->enums->hasDefault('level'));
     }
 
     public function test_enum_with_optional_state(): void
@@ -988,9 +988,9 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertFalse($result->enum->isRequired('level'));
-        $this->assertTrue($result->enum->isOptional('level'));
-        $this->assertFalse($result->enum->hasDefault('level'));
+        $this->assertFalse($result->enums->isRequired('level'));
+        $this->assertTrue($result->enums->isOptional('level'));
+        $this->assertFalse($result->enums->hasDefault('level'));
     }
 
     public function test_enum_with_defaulted_state(): void
@@ -1000,10 +1000,10 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertFalse($result->enum->isRequired('level'));
-        $this->assertFalse($result->enum->isOptional('level'));
-        $this->assertTrue($result->enum->hasDefault('level'));
-        $this->assertSame('middle', $result->enum->getDefault('level'));
+        $this->assertFalse($result->enums->isRequired('level'));
+        $this->assertFalse($result->enums->isOptional('level'));
+        $this->assertTrue($result->enums->hasDefault('level'));
+        $this->assertSame('middle', $result->enums->getDefault('level'));
     }
 
     public function test_enum_to_associative_array(): void
@@ -1013,7 +1013,7 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $array = $result->enum->toAssociativeArray();
+        $array = $result->enums->toAssociativeArray();
 
         $this->assertSame(['level' => 'high', 'mode' => 'staging'], $array);
     }
@@ -1025,7 +1025,7 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $fullArray = $result->enum->toFullArray();
+        $fullArray = $result->enums->toFullArray();
 
         $this->assertCount(2, $fullArray);
         $this->assertSame('level', $fullArray[0]['name']);
@@ -1044,8 +1044,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertCount(1, $result->variadic);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertCount(1, $result->variadics);
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
     }
 
     public function test_parse_restricted_variadic_with_single_value(): void
@@ -1056,8 +1056,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertCount(1, $result->variadic);
-        $this->assertSame(['json'], $result->variadic->first()->values->toArray());
+        $this->assertCount(1, $result->variadics);
+        $this->assertSame(['json'], $result->variadics->first()->values->toArray());
     }
 
     public function test_parse_restricted_variadic_with_empty_values(): void
@@ -1068,8 +1068,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertCount(1, $result->variadic);
-        $this->assertSame([], $result->variadic->first()->values->toArray());
+        $this->assertCount(1, $result->variadics);
+        $this->assertSame([], $result->variadics->first()->values->toArray());
     }
 
     public function test_parse_restricted_variadic_with_spaces_in_values(): void
@@ -1080,7 +1080,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
     }
 
     public function test_parse_restricted_variadic_with_flags(): void
@@ -1091,7 +1091,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1103,7 +1103,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
+        $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
 
         $data = $result->custom_data->toArray();
@@ -1119,9 +1119,9 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertCount(2, $result->variadic);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
-        $this->assertSame(['json'], $result->variadic->last()->values->toArray());
+        $this->assertCount(2, $result->variadics);
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
+        $this->assertSame(['json'], $result->variadics->last()->values->toArray());
     }
 
     public function test_parse_mixed_variadic_types(): void
@@ -1132,9 +1132,9 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertCount(2, $result->variadic);
-        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
-        $this->assertSame(['tag1', 'tag2'], $result->variadic->last()->values->toArray());
+        $this->assertCount(2, $result->variadics);
+        $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
+        $this->assertSame(['tag1', 'tag2'], $result->variadics->last()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1146,9 +1146,9 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertCount(1, $result->variadic);
-        $this->assertSame('user_role', $result->variadic->first()->name);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertCount(1, $result->variadics);
+        $this->assertSame('user_role', $result->variadics->first()->name);
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
     }
 
     public function test_parse_restricted_variadic_throws_exception_on_invalid_value(): void
@@ -1181,8 +1181,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertCount(1, $result->variadic);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertCount(1, $result->variadics);
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
     }
 
     // ==================== RESTRICTED VARIADIC VALIDATION TESTS ====================
@@ -1415,8 +1415,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('/var/www', $result->required->first()->value);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertSame('/var/www', $result->requireds->first()->value);
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1428,8 +1428,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('tar.gz', $result->default->first()->value);
-        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
     }
 
     public function test_parse_signature_with_restricted_variadic_and_enum(): void
@@ -1440,8 +1440,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('high', $result->enum->get('level'));
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertSame('high', $result->enums->get('level'));
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
     }
 
     public function test_validate_restricted_variadic_works_with_all_components(): void
@@ -1476,7 +1476,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1488,7 +1488,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('tar.gz', $result->default->first()->value);
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1500,7 +1500,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame(['admin', 'editor'], $result->variadic->first()->values->toArray());
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1512,7 +1512,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('high', $result->enum->get('level'));
+        $this->assertSame('high', $result->enums->get('level'));
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1536,7 +1536,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1548,8 +1548,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
-        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1561,7 +1561,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1573,7 +1573,7 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1606,10 +1606,10 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('backup', $result->source);
-        $this->assertSame('/var/www', $result->required->first()->value);
-        $this->assertSame('/backup', $result->required->last()->value);
-        $this->assertSame('tar.gz', $result->default->first()->value);
-        $this->assertSame(['cache', 'logs'], $result->variadic->first()->values->toArray());
+        $this->assertSame('/var/www', $result->requireds->first()->value);
+        $this->assertSame('/backup', $result->requireds->last()->value);
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertSame(['cache', 'logs'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1621,8 +1621,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('deploy', $result->source);
-        $this->assertSame('staging', $result->required->first()->value);
-        $this->assertSame('v1.2.3', $result->default->first()->value);
+        $this->assertSame('staging', $result->requireds->first()->value);
+        $this->assertSame('v1.2.3', $result->defaults->first()->value);
         $this->assertTrue($result->flags->first()->value);
         $this->assertFalse($result->flags->last()->value);
     }
@@ -1639,7 +1639,7 @@ final class SignatureParserTest extends TestCase
         $this->assertSame('Hello World', $data['greeting']);
         $this->assertSame('goodby', $data['later']);
         $this->assertSame('send', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
+        $this->assertSame('John', $result->requireds->first()->value);
         $this->assertTrue($result->flags->first()->value);
     }
 
@@ -1671,8 +1671,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('set-level', $result->source);
-        $this->assertSame('master', $result->enum->get('level'));
-        $this->assertSame(['beginner', 'middle', 'master'], $result->enum->getAllowedValues('level'));
+        $this->assertSame('master', $result->enums->get('level'));
+        $this->assertSame(['beginner', 'middle', 'master'], $result->enums->getAllowedValues('level'));
     }
 
     public function test_parse_with_comments_and_duplicate_names_detection(): void
@@ -1703,8 +1703,8 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->parse($signature, $query);
 
         $this->assertSame('command', $result->source);
-        $this->assertSame('John', $result->required->first()->value);
-        $this->assertSame(['admin'], $result->variadic->first()->values->toArray());
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
 }

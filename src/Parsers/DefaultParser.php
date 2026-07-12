@@ -91,7 +91,7 @@ final class DefaultParser implements ParserInterface
 
         return ParsedResultRecord::from([
             'data' => [
-                'default' => $defaults,
+                'defaults' => $defaults,
             ],
             'signature' => $newSignature,
             'query' => $newQuery,

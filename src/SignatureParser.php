@@ -48,7 +48,7 @@ use InvalidArgumentException;
  * $parser = new SignatureParser();
  * $result = $parser->parse('greet {name} {--formal}', 'greet John --formal');
  * echo $result->source; // 'greet'
- * echo $result->required->first()->value; // 'John'
+ * echo $result->requireds->first()->value; // 'John'
  */
 final class SignatureParser implements ParserRegistryInterface, SignatureParserInterface
 {
@@ -548,26 +548,26 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     private function buildRecord(array $data): ParsedSignatureRecord
     {
-        $required = new ArgumentCollection;
-        foreach ($data['required'] ?? [] as $name => $value) {
-            $required->add(new ArgumentRecord($name, $value));
+        $requireds = new ArgumentCollection;
+        foreach ($data['requireds'] ?? [] as $name => $value) {
+            $requireds->add(new ArgumentRecord($name, $value));
         }
 
-        $default = new ArgumentCollection;
-        foreach ($data['default'] ?? [] as $name => $value) {
-            $default->add(new ArgumentRecord($name, $value));
+        $defaults = new ArgumentCollection;
+        foreach ($data['defaults'] ?? [] as $name => $value) {
+            $defaults->add(new ArgumentRecord($name, $value));
         }
 
-        $variadic = new VariadicArgumentCollection;
-        $variadicData = $data['variadic'] ?? [];
+        $variadics = new VariadicArgumentCollection;
+        $variadicData = $data['variadics'] ?? [];
         foreach ($variadicData as $name => $values) {
             // Vérifier si des restrictions sont stockées séparément
             $restrictions = new StringTypedCollection;
-            if (isset($data['variadic_restrictions'][$name])) {
-                $restrictions = StringTypedCollection::from($data['variadic_restrictions'][$name]);
+            if (isset($data['restrictions'][$name])) {
+                $restrictions = StringTypedCollection::from($data['restrictions'][$name]);
             }
 
-            $variadic->add(new VariadicArgumentRecord(
+            $variadics->add(new VariadicArgumentRecord(
                 $name,
                 StringTypedCollection::from($values),
                 $restrictions
@@ -580,9 +580,9 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         }
 
         // Build EnumCollection
-        $enum = new EnumCollection;
-        foreach ($data['enum'] ?? [] as $name => $enumData) {
-            $enum->add(new EnumRecord(
+        $enums = new EnumCollection;
+        foreach ($data['enums'] ?? [] as $name => $enumData) {
+            $enums->add(new EnumRecord(
                 name: $name,
                 value: $enumData['value'] ?? null,
                 allowed_values: StringTypedCollection::from($enumData['allowed_values'] ?? []),
@@ -591,7 +591,7 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             ));
         }
 
-        $standardKeys = ['source', 'required', 'default', 'variadic', 'variadic_restrictions', 'flags', 'enum'];
+        $standardKeys = ['source', 'requireds', 'defaults', 'variadics', 'restrictions', 'flags', 'enums'];
         $customData = array_filter(
             $data,
             fn ($key) => ! in_array($key, $standardKeys, true),
@@ -600,11 +600,11 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
 
         return new ParsedSignatureRecord(
             source: $data['source'] ?? '',
-            required: $required,
-            default: $default,
-            variadic: $variadic,
+            requireds: $requireds,
+            defaults: $defaults,
+            variadics: $variadics,
             flags: $flags,
-            enum: $enum,
+            enums: $enums,
             custom_data: new StrictDataObject($customData),
         );
     }

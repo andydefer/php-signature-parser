@@ -25,7 +25,7 @@ final class DefaultParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame(['format' => 'tar.gz', 'output' => 'build'], $result->data->toArray()['default']);
+        $this->assertSame(['format' => 'tar.gz', 'output' => 'build'], $result->data->toArray()['defaults']);
         $this->assertSame([], $result->signature->toArray());
         $this->assertSame([], $result->query->toArray());
     }
@@ -37,7 +37,7 @@ final class DefaultParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame(['format' => 'tar.gz', 'output' => 'dist'], $result->data->toArray()['default']);
+        $this->assertSame(['format' => 'tar.gz', 'output' => 'dist'], $result->data->toArray()['defaults']);
         $this->assertSame([], $result->signature->toArray());
         $this->assertSame([], $result->query->toArray());
     }
@@ -49,7 +49,7 @@ final class DefaultParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame(['format' => 'tar.gz'], $result->data->toArray()['default']);
+        $this->assertSame(['format' => 'tar.gz'], $result->data->toArray()['defaults']);
         $this->assertSame(['excludes*'], $result->signature->toArray());
         $this->assertSame(['[cache, logs]'], $result->query->toArray());
     }
@@ -61,7 +61,7 @@ final class DefaultParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame(['format' => 'tar.gz'], $result->data->toArray()['default']);
+        $this->assertSame(['format' => 'tar.gz'], $result->data->toArray()['defaults']);
         $this->assertSame(['--force'], $result->signature->toArray());
         $this->assertSame(['--force'], $result->query->toArray());
     }
@@ -77,7 +77,7 @@ final class DefaultParserTest extends TestCase
             'format' => 'tar.gz',
             'compression' => '9',
             'backup' => 'true',
-        ], $result->data->toArray()['default']);
+        ], $result->data->toArray()['defaults']);
     }
 
     public function test_handles_default_with_override(): void
@@ -87,7 +87,7 @@ final class DefaultParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame(['format' => 'tar.gz'], $result->data->toArray()['default']);
+        $this->assertSame(['format' => 'tar.gz'], $result->data->toArray()['defaults']);
     }
 
     public function test_handles_no_query_values(): void
@@ -97,7 +97,7 @@ final class DefaultParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame(['format' => 'zip', 'output' => 'dist'], $result->data->toArray()['default']);
+        $this->assertSame(['format' => 'zip', 'output' => 'dist'], $result->data->toArray()['defaults']);
         $this->assertSame([], $result->signature->toArray());
         $this->assertSame([], $result->query->toArray());
     }

@@ -26,7 +26,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertArrayHasKey('excludes', $variadics);
         $this->assertSame(['cache', 'logs', 'tmp'], $variadics['excludes']);
@@ -41,7 +41,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertSame(['cache', 'logs', 'tmp'], $variadics['excludes']);
     }
 
@@ -52,7 +52,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertSame([], $variadics['excludes']);
         $this->assertSame([], $result->signature->toArray());
@@ -66,7 +66,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertSame(['cache', 'logs'], $variadics['excludes']);
         $this->assertSame(['--force'], $result->signature->toArray());
@@ -80,7 +80,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(2, $variadics);
         $this->assertArrayHasKey('excludes', $variadics);
         $this->assertArrayHasKey('includes', $variadics);
@@ -99,7 +99,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertArrayHasKey('roles', $variadics);
         $this->assertSame(['admin', 'editor'], $variadics['roles']);
@@ -134,7 +134,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertSame(['json'], $variadics['format']);
     }
@@ -146,7 +146,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertSame(['admin', 'editor'], $variadics['roles']);
     }
@@ -158,7 +158,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertSame(['admin', 'editor'], $variadics['roles']);
     }
@@ -170,7 +170,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertArrayHasKey('roles', $variadics);
         $this->assertSame(['admin', 'editor'], $variadics['roles']);
@@ -183,7 +183,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertSame(['admin'], $variadics['roles']);
         $this->assertSame(['--verbose'], $result->signature->toArray());
@@ -208,7 +208,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(2, $variadics);
         $this->assertArrayHasKey('roles', $variadics);
         $this->assertArrayHasKey('tags', $variadics);
@@ -223,7 +223,7 @@ final class VariadicParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $variadics = $result->data->variadic->toArray();
+        $variadics = $result->data->variadics->toArray();
         $this->assertCount(1, $variadics);
         $this->assertArrayHasKey('user_role', $variadics);
         $this->assertSame(['admin', 'editor'], $variadics['user_role']);

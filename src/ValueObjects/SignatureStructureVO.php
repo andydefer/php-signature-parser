@@ -36,13 +36,13 @@ final class SignatureStructureVO extends AbstractValueObject
     private string $source;
 
     /** @var array<string> */
-    private array $required = [];
+    private array $requireds = [];
 
     /** @var array<string, string|null> */
-    private array $default = [];
+    private array $defaults = [];
 
     /** @var array<string> */
-    private array $variadic = [];
+    private array $variadics = [];
 
     /** @var array<string> */
     private array $flags = [];
@@ -82,9 +82,9 @@ final class SignatureStructureVO extends AbstractValueObject
 
         $this->structure = new StrictDataObject([
             'source' => $this->source,
-            'required' => $this->required,
-            'default' => $this->default,
-            'variadic' => $this->variadic,
+            'requireds' => $this->requireds,
+            'defaults' => $this->defaults,
+            'variadics' => $this->variadics,
             'flags' => $this->flags,
             'enums' => $this->enums,
         ]);
@@ -113,7 +113,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function getRequireds(): array
     {
-        return $this->required;
+        return $this->requireds;
     }
 
     /**
@@ -125,7 +125,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function getDefaults(): array
     {
-        return $this->default;
+        return $this->defaults;
     }
 
     /**
@@ -135,7 +135,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function getVariadics(): array
     {
-        return $this->variadic;
+        return $this->variadics;
     }
 
     /**
@@ -223,7 +223,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function hasRequired(string $name): bool
     {
-        return in_array($name, $this->required, true);
+        return in_array($name, $this->requireds, true);
     }
 
     /**
@@ -231,7 +231,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function hasDefault(string $name): bool
     {
-        return array_key_exists($name, $this->default);
+        return array_key_exists($name, $this->defaults);
     }
 
     /**
@@ -239,7 +239,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function hasVariadic(string $name): bool
     {
-        return in_array($name, $this->variadic, true);
+        return in_array($name, $this->variadics, true);
     }
 
     /**
@@ -273,7 +273,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function hasRequireds(): bool
     {
-        return $this->required !== [];
+        return $this->requireds !== [];
     }
 
     /**
@@ -281,7 +281,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function hasDefaults(): bool
     {
-        return $this->default !== [];
+        return $this->defaults !== [];
     }
 
     /**
@@ -289,7 +289,7 @@ final class SignatureStructureVO extends AbstractValueObject
      */
     public function hasVariadics(): bool
     {
-        return $this->variadic !== [];
+        return $this->variadics !== [];
     }
 
     /**
@@ -368,7 +368,7 @@ final class SignatureStructureVO extends AbstractValueObject
                 continue;
             }
 
-            // ✅ Check for enum: ::name->[values]=default
+            // Check for enum: ::name->[values]=default
             if (str_starts_with($element, '::')) {
                 $this->parseEnumElement($element);
 
@@ -382,7 +382,7 @@ final class SignatureStructureVO extends AbstractValueObject
             }
 
             if (str_contains($element, '*')) {
-                $this->variadic[] = str_replace('*', '', $element);
+                $this->variadics[] = str_replace('*', '', $element);
 
                 continue;
             }
@@ -391,15 +391,15 @@ final class SignatureStructureVO extends AbstractValueObject
                 [$name, $defaultValue] = explode('=', $element, 2);
 
                 if ($defaultValue === '?') {
-                    $this->default[$name] = null;
+                    $this->defaults[$name] = null;
                 } elseif ($defaultValue !== '') {
-                    $this->default[$name] = $defaultValue;
+                    $this->defaults[$name] = $defaultValue;
                 }
 
                 continue;
             }
 
-            $this->required[] = $element;
+            $this->requireds[] = $element;
         }
     }
 

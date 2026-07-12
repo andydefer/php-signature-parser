@@ -25,8 +25,8 @@ final class RequiredParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('/var/www', $result->data->required->source);
-        $this->assertSame('/backup', $result->data->required->destination);
+        $this->assertSame('/var/www', $result->data->requireds->source);
+        $this->assertSame('/backup', $result->data->requireds->destination);
         $this->assertSame([], $result->signature->toArray());
         $this->assertSame([], $result->query->toArray());
     }
@@ -38,7 +38,7 @@ final class RequiredParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('/var/www', $result->data->required->source);
+        $this->assertSame('/var/www', $result->data->requireds->source);
         $this->assertSame(['format=zip'], $result->signature->toArray());
         $this->assertSame(['zip'], $result->query->toArray());
     }
@@ -50,7 +50,7 @@ final class RequiredParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('/var/www', $result->data->required->source);
+        $this->assertSame('/var/www', $result->data->requireds->source);
         $this->assertSame(['excludes*'], $result->signature->toArray());
         $this->assertSame(['[cache, logs]'], $result->query->toArray());
     }
@@ -62,7 +62,7 @@ final class RequiredParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('/var/www', $result->data->required->source);
+        $this->assertSame('/var/www', $result->data->requireds->source);
         $this->assertSame(['--force'], $result->signature->toArray());
         $this->assertSame(['--force'], $result->query->toArray());
     }
@@ -74,8 +74,8 @@ final class RequiredParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('', $result->data->required->source);
-        $this->assertSame('', $result->data->required->destination);
+        $this->assertSame('', $result->data->requireds->source);
+        $this->assertSame('', $result->data->requireds->destination);
     }
 
     public function test_handles_missing_query_values(): void
@@ -85,9 +85,9 @@ final class RequiredParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        $this->assertSame('/var/www', $result->data->required->source);
-        $this->assertSame('', $result->data->required->destination);
-        $this->assertSame('', $result->data->required->format);
+        $this->assertSame('/var/www', $result->data->requireds->source);
+        $this->assertSame('', $result->data->requireds->destination);
+        $this->assertSame('', $result->data->requireds->format);
     }
 
     // ==================== VALIDATION TESTS ====================

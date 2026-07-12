@@ -41,7 +41,7 @@ final class QueryBuilder
     private array $flags = [];
 
     /** @var array<string, string> */
-    private array $customTags = [];
+    private array $custom_tags = [];
 
     /** @var array<string, string> */
     private array $enums = [];
@@ -50,7 +50,7 @@ final class QueryBuilder
 
     private bool $validated = false;
 
-    private ValidationResultRecord $validationResult;
+    private ValidationResultRecord $validation_result;
 
     /**
      * Initializes a new QueryBuilder with a signature.
@@ -79,9 +79,9 @@ final class QueryBuilder
         $this->structure = $structure;
         $this->source = $structure->getSource();
 
-        // ✅ Initialiser avec les valeurs par défaut - ignorer les tokens d'énum
+        // Initialiser avec les valeurs par défaut - ignorer les tokens d'énum
         foreach ($structure->getDefaults() as $name => $defaultValue) {
-            // ✅ Si le nom contient '->[' c'est un token d'énum, on le saute
+            // Si le nom contient '->[' c'est un token d'énum, on le saute
             if (str_contains($name, '->[')) {
                 continue;
             }
@@ -108,19 +108,19 @@ final class QueryBuilder
         $parsed = $parser->parse($this->structure->getRaw(), $query);
         $queryTokens = explode(' ', $query);
 
-        foreach ($parsed->required as $arg) {
+        foreach ($parsed->requireds as $arg) {
             $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '~';
         }
 
-        foreach ($parsed->default as $arg) {
-            // ✅ Vérifier si c'est un enum ou un token d'énum
+        foreach ($parsed->defaults as $arg) {
+            // Vérifier si c'est un enum ou un token d'énum
             if ($this->isEnumArgument($arg->name) || str_contains($arg->name, '->[')) {
                 continue;
             }
             $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '~';
         }
 
-        foreach ($parsed->variadic as $arg) {
+        foreach ($parsed->variadics as $arg) {
             $values = $arg->values->join(' ');
             $this->arguments[$arg->name] = $values !== '' ? $values : '~';
         }
@@ -129,8 +129,8 @@ final class QueryBuilder
             $this->flags['--'.$flag->name] = $flag->value;
         }
 
-        // ✅ Extract enums
-        foreach ($parsed->enum as $enum) {
+        // Extract enums
+        foreach ($parsed->enums as $enum) {
             if ($enum->value !== null && in_array((string) $enum->value, $queryTokens, true)) {
                 $this->enums[$enum->name] = $enum->value;
             } elseif ($enum->value === '~' && in_array('~', $queryTokens, true)) {
@@ -141,7 +141,7 @@ final class QueryBuilder
         // Extract custom tags
         $customData = $parsed->custom_data->toArray();
         foreach ($customData as $key => $value) {
-            $this->customTags[$key] = $value;
+            $this->custom_tags[$key] = $value;
         }
 
         return $this;
@@ -417,7 +417,7 @@ final class QueryBuilder
      */
     public function setCustom(string $key, string $value): self
     {
-        $this->customTags[$key] = $value;
+        $this->custom_tags[$key] = $value;
 
         return $this;
     }
@@ -430,7 +430,7 @@ final class QueryBuilder
     public function setCustoms(array $tags): self
     {
         foreach ($tags as $key => $value) {
-            $this->customTags[$key] = $value;
+            $this->custom_tags[$key] = $value;
         }
 
         return $this;
@@ -443,7 +443,7 @@ final class QueryBuilder
      */
     public function removeCustom(string $key): self
     {
-        unset($this->customTags[$key]);
+        unset($this->custom_tags[$key]);
 
         return $this;
     }
@@ -456,7 +456,7 @@ final class QueryBuilder
      */
     public function getCustom(string $key): ?string
     {
-        return $this->customTags[$key] ?? null;
+        return $this->custom_tags[$key] ?? null;
     }
 
     /**
@@ -466,7 +466,7 @@ final class QueryBuilder
      */
     public function getCustoms(): array
     {
-        return $this->customTags;
+        return $this->custom_tags;
     }
 
     /**
@@ -528,7 +528,7 @@ final class QueryBuilder
     {
         $this->arguments = [];
         $this->flags = [];
-        $this->customTags = [];
+        $this->custom_tags = [];
         $this->enums = [];
 
         foreach ($this->structure->getDefaults() as $name => $defaultValue) {
@@ -557,10 +557,10 @@ final class QueryBuilder
         $query = $this->buildQueryString();
         $parser = new SignatureParser;
 
-        $this->validationResult = $parser->validate($this->structure->getRaw(), $query);
+        $this->validation_result = $parser->validate($this->structure->getRaw(), $query);
         $this->validated = true;
 
-        return $this->validationResult;
+        return $this->validation_result;
     }
 
     /**
@@ -572,7 +572,7 @@ final class QueryBuilder
             $this->validate();
         }
 
-        return $this->validationResult->isValid;
+        return $this->validation_result->isValid;
     }
 
     /**
@@ -584,7 +584,7 @@ final class QueryBuilder
             $this->validate();
         }
 
-        return $this->validationResult->errors;
+        return $this->validation_result->errors;
     }
 
     /**
@@ -618,25 +618,25 @@ final class QueryBuilder
     {
         $parts = [$this->source];
 
-        // ✅ 1. Enums d'abord (après la source, avant tout)
+        // 1. Enums d'abord (après la source, avant tout)
         foreach ($this->enums as $name => $value) {
             $parts[] = $value;
         }
 
-        // ✅ 2. Default enums (si l'énum n'est pas défini dans $this->enums)
+        // 2. Default enums (si l'énum n'est pas défini dans $this->enums)
         foreach ($this->structure->getEnums() as $name => $enumData) {
-            // ✅ Si l'énum n'est pas défini dans $this->enums
+            // Si l'énum n'est pas défini dans $this->enums
             if (! isset($this->enums[$name])) {
-                // ✅ Si l'énum a une valeur par défaut (ni required ni optional)
+                // Si l'énum a une valeur par défaut (ni required ni optional)
                 if (! $enumData['is_required'] && ! $enumData['is_optional'] && $enumData['default_value'] !== null && $enumData['default_value'] !== '') {
                     $parts[] = $enumData['default_value'];
                 }
-                // ✅ Si optional, on ne fait rien
-                // ✅ Si required, on ne fait rien (l'utilisateur doit le fournir)
+                // Si optional, on ne fait rien
+                // Si required, on ne fait rien (l'utilisateur doit le fournir)
             }
         }
 
-        // ✅ 3. Required arguments (après les enums)
+        // 3. Required arguments (après les enums)
         foreach ($this->structure->getRequireds() as $name) {
             if ($this->isEnumArgument($name)) {
                 continue;
@@ -649,7 +649,7 @@ final class QueryBuilder
             }
         }
 
-        // ✅ 4. Default arguments (non enum)
+        // 4. Default arguments (non enum)
         foreach (array_keys($this->structure->getDefaults()) as $name) {
             if ($this->isEnumArgument($name)) {
                 continue;
@@ -678,7 +678,7 @@ final class QueryBuilder
         }
 
         // Add custom tags at the end
-        foreach ($this->customTags as $key => $value) {
+        foreach ($this->custom_tags as $key => $value) {
             $parts[] = '<'.$key.'="'.$value.'">';
         }
 
@@ -724,7 +724,7 @@ final class QueryBuilder
     {
         $this->arguments = $this->arguments;
         $this->flags = $this->flags;
-        $this->customTags = $this->customTags;
+        $this->custom_tags = $this->custom_tags;
         $this->enums = $this->enums;
         $this->validated = false;
     }

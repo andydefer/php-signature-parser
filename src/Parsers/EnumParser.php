@@ -21,15 +21,15 @@ use AndyDefer\SignatureParser\Records\ValidationResultRecord;
  * @example
  * Signature: 'set-level ::level->[beginner,middle,master]=*'
  * Query: 'set-level master'
- * Result: ['enum' => ['level' => ['value' => 'master', 'allowed_values' => [...], ...]]]
+ * Result: ['enums' => ['level' => ['value' => 'master', 'allowed_values' => [...], ...]]]
  * @example
  * Signature: 'set-level ::level->[beginner,middle,master]=?'
  * Query: 'set-level ~'
- * Result: ['enum' => ['level' => ['value' => null, ...]]]
+ * Result: ['enums' => ['level' => ['value' => null, ...]]]
  * @example
  * Signature: 'set-level ::level->[beginner,middle,master]=middle'
  * Query: 'set-level'
- * Result: ['enum' => ['level' => ['value' => 'middle', ...]]]
+ * Result: ['enums' => ['level' => ['value' => 'middle', ...]]]
  */
 final class EnumParser implements ParserInterface
 {
@@ -57,11 +57,11 @@ final class EnumParser implements ParserInterface
                 $valueState = ValueState::DEFAULTED;
                 $consumed = false;
 
-                // ✅ Vérifier si la valeur est dans la requête
+                // Vérifier si la valeur est dans la requête
                 if (isset($query[$queryIndex])) {
                     $queryToken = $query[$queryIndex];
 
-                    // ✅ Skip token (~) => null (pour nullable)
+                    // Skip token (~) => null (pour nullable)
                     if ($queryToken === '~' && $isOptional) {
                         $value = null;
                         $valueState = ValueState::OPTIONAL;
@@ -75,13 +75,13 @@ final class EnumParser implements ParserInterface
                     }
                 }
 
-                // ✅ Si pas consommé et required, c'est une erreur (sera capturée par validate)
+                // Si pas consommé et required, c'est une erreur (sera capturée par validate)
                 if (! $consumed && $isRequired) {
                     $value = null;
                     $valueState = ValueState::REQUIRED;
                 }
 
-                // ✅ Si pas consommé et pas required, utiliser la valeur par défaut
+                // Si pas consommé et pas required, utiliser la valeur par défaut
                 if (! $consumed && ! $isRequired) {
                     $value = $defaultValue;
                     $valueState = ValueState::DEFAULTED;
@@ -94,7 +94,7 @@ final class EnumParser implements ParserInterface
                     'value_state' => $valueState,
                 ];
 
-                // ✅ On ne garde pas le token dans la signature, il est consommé
+                // On ne garde pas le token dans la signature, il est consommé
             } else {
                 $newSignature[] = $token;
 
@@ -105,13 +105,13 @@ final class EnumParser implements ParserInterface
             }
         }
 
-        // ✅ Ajouter les tokens de requête restants
+        // Ajouter les tokens de requête restants
         for ($i = $queryIndex; $i < count($query); $i++) {
             $newQuery[] = $query[$i];
         }
 
         return ParsedResultRecord::from([
-            'data' => ['enum' => $enumData],
+            'data' => ['enums' => $enumData],
             'signature' => $newSignature,
             'query' => $newQuery,
         ]);
@@ -131,7 +131,7 @@ final class EnumParser implements ParserInterface
             if ($this->isEnumToken($token)) {
                 [$name, $allowedValues, $defaultValue, $isRequired, $isOptional] = $this->parseEnumToken($token);
 
-                // ✅ Vérifier que les valeurs autorisées ne sont pas vides
+                // Vérifier que les valeurs autorisées ne sont pas vides
                 if (empty($allowedValues)) {
                     $errors->add("Enum '{$name}' has no allowed values");
                     $suggestions->add("Provide at least one allowed value: ::{$name}->[value1,value2,...]");
@@ -141,17 +141,17 @@ final class EnumParser implements ParserInterface
 
                 $allowedList = implode(', ', $allowedValues);
 
-                // ✅ Vérifier la valeur par défaut
+                // Vérifier la valeur par défaut
                 if ($defaultValue !== null && ! in_array($defaultValue, $allowedValues, true)) {
                     $errors->add("Default value '{$defaultValue}' for enum '{$name}' is not in allowed values: {$allowedList}");
                     $suggestions->add("Use one of the allowed values: {$allowedList}");
                 }
 
-                // ✅ Vérifier la valeur dans la requête si présente
+                // Vérifier la valeur dans la requête si présente
                 if (isset($query[$queryIndex])) {
                     $queryToken = $query[$queryIndex];
 
-                    // ✅ Skip token (~) est valide uniquement pour optional
+                    // Skip token (~) est valide uniquement pour optional
                     if ($queryToken === '~') {
                         if (! $isOptional) {
                             $errors->add("Cannot use '~' for non-optional enum '{$name}'. Allowed: {$allowedList}");
@@ -162,7 +162,7 @@ final class EnumParser implements ParserInterface
                         continue;
                     }
 
-                    // ✅ Vérifier si la valeur est autorisée
+                    // Vérifier si la valeur est autorisée
                     if (! in_array($queryToken, $allowedValues, true)) {
                         $errors->add("Invalid value '{$queryToken}' for enum '{$name}'. Allowed: {$allowedList}");
                         $suggestions->add("Use one of: {$allowedList}".($isOptional ? " or '~' for null" : ''));
@@ -170,7 +170,7 @@ final class EnumParser implements ParserInterface
 
                     $queryIndex++;
                 } else {
-                    // ✅ Pas de valeur dans la requête
+                    // Pas de valeur dans la requête
                     if ($isRequired) {
                         $errors->add("Missing required enum value for '{$name}'. Allowed: {$allowedList}");
                         $suggestions->add("Provide one of: {$allowedList}");
@@ -217,27 +217,27 @@ final class EnumParser implements ParserInterface
      */
     private function parseEnumToken(string $token): array
     {
-        // ✅ Supprimer le préfixe '::'
+        // Supprimer le préfixe '::'
         $tokenWithoutPrefix = substr($token, strlen(self::ENUM_PREFIX));
 
-        // ✅ Extraire le nom avant ->
+        // Extraire le nom avant ->
         $name = substr($tokenWithoutPrefix, 0, strpos($tokenWithoutPrefix, '->'));
 
-        // ✅ Extraire la partie entre crochets
+        // Extraire la partie entre crochets
         $bracketContent = substr($tokenWithoutPrefix, strpos($tokenWithoutPrefix, '[') + 1);
         $bracketContent = substr($bracketContent, 0, strpos($bracketContent, ']'));
 
-        // ✅ Extraire les valeurs autorisées - gérer le cas vide
+        // Extraire les valeurs autorisées - gérer le cas vide
         $allowedValues = [];
         if ($bracketContent !== '') {
             $allowedValues = array_map('trim', explode(',', $bracketContent));
-            // ✅ Filtrer les valeurs vides
+            // Filtrer les valeurs vides
             $allowedValues = array_filter($allowedValues, fn ($v) => $v !== '');
-            // ✅ Réindexer le tableau
+            // Réindexer le tableau
             $allowedValues = array_values($allowedValues);
         }
 
-        // ✅ Extraire la valeur par défaut (après =)
+        // Extraire la valeur par défaut (après =)
         $defaultValue = null;
         $isRequired = false;
         $isOptional = false;
@@ -257,7 +257,7 @@ final class EnumParser implements ParserInterface
                 $isRequired = false;
             }
         } else {
-            // ✅ Pas de '=' => required par défaut
+            // Pas de '=' => required par défaut
             $isRequired = true;
             $defaultValue = null;
         }

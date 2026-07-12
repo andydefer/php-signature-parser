@@ -116,9 +116,9 @@ final class VariadicParser implements ParserInterface
             $queryIndex++;
         }
 
-        // ✅ Retourner un tableau simple [name => values] pour buildRecord()
+        // Retourner un tableau simple [name => values] pour buildRecord()
         return ParsedResultRecord::from([
-            'data' => ['variadic' => $this->buildVariadicArray($variadics)],
+            'data' => ['variadics' => $this->buildVariadicArray($variadics)],
             'signature' => $newSignature,
             'query' => $newQuery,
         ]);

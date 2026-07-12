@@ -398,7 +398,7 @@ final class SignatureVOTest extends TestCase
 
         $this->assertInstanceOf(StrictDataObject::class, $parsed);
         $this->assertEquals('docker', $parsed->source);
-        $this->assertEquals(['container' => 'run'], $parsed->required->toArray());
+        $this->assertEquals(['container' => 'run'], $parsed->requireds->toArray());
         $this->assertEquals(['detach' => true], $parsed->flags->toArray());
     }
 
@@ -413,7 +413,7 @@ final class SignatureVOTest extends TestCase
 
         $this->assertInstanceOf(StrictDataObject::class, $parsed);
         $this->assertEquals('send', $parsed->source);
-        $this->assertEquals(['recipient' => 'John'], $parsed->required->toArray());
+        $this->assertEquals(['recipient' => 'John'], $parsed->requireds->toArray());
         $this->assertEquals(['verbose' => true], $parsed->flags->toArray());
         $this->assertEquals(['greeting' => 'Hello World'], $parsed->custom_tags->toArray());
     }
@@ -443,7 +443,7 @@ final class SignatureVOTest extends TestCase
 
         $this->assertInstanceOf(StrictDataObject::class, $value);
         $this->assertEquals('docker', $value->source);
-        $this->assertEquals(['container' => 'run'], $value->required->toArray());
+        $this->assertEquals(['container' => 'run'], $value->requireds->toArray());
         $this->assertEquals(['detach' => true], $value->flags->toArray());
     }
 
