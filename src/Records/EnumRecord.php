@@ -11,7 +11,7 @@ use AndyDefer\SignatureParser\Enums\ValueState;
 /**
  * Record representing an enum argument.
  *
- * Contains the name, value, allowed values, default value,
+ * Contains the name, value, allowed values, default value, comment,
  * and flags indicating if the enum is required or nullable.
  */
 final class EnumRecord extends AbstractRecord
@@ -22,5 +22,6 @@ final class EnumRecord extends AbstractRecord
         public readonly StringTypedCollection $allowed_values,
         public readonly ?string $default_value = null,
         public readonly ValueState $value_state = ValueState::OPTIONAL,
+        public readonly ?string $comment = null,
     ) {}
 }

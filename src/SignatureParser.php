@@ -55,11 +55,14 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
     /** @var array<ParserInterface> */
     private array $parsers = [];
 
+    private CommentManager $commentManager;
+
     /**
      * Initializes the parser with the default chain of responsibility.
      */
     public function __construct()
     {
+        $this->commentManager = new CommentManager;
         $this->addParser(new SourceParser);
         $this->addParser(new RequiredParser);
         $this->addParser(new EnumParser);
@@ -107,8 +110,8 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     public function parse(string $signature, string $query): ParsedSignatureRecord
     {
-        // Nettoyer les commentaires de la signature
-        $cleanSignature = $this->cleanSignatureComments($signature);
+        // Extraire les commentaires de la signature
+        $cleanSignature = $this->commentManager->extractComments($signature);
 
         $signatureElements = $this->extractSignatureElements($cleanSignature);
         $queryElements = $this->extractQueryElements($query);
@@ -143,8 +146,8 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     public function validate(string $signature, string $query): ValidationResultRecord
     {
-        // Nettoyer les commentaires de la signature
-        $cleanSignature = $this->cleanSignatureComments($signature);
+        // Extraire les commentaires de la signature
+        $cleanSignature = $this->commentManager->extractComments($signature);
 
         $signatureElements = $this->extractSignatureElements($cleanSignature);
         $queryElements = $this->extractQueryElements($query);
@@ -198,8 +201,8 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     public function validateSignature(string $signature): ValidationResultRecord
     {
-        // Nettoyer les commentaires de la signature
-        $cleanSignature = $this->cleanSignatureComments($signature);
+        // Extraire les commentaires de la signature
+        $cleanSignature = $this->commentManager->extractComments($signature);
 
         $errors = new StringTypedCollection;
         $suggestions = new StringTypedCollection;
@@ -323,38 +326,6 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
         }
 
         return StringTypedCollection::from($result);
-    }
-
-    /**
-     * Removes comments from signature arguments.
-     *
-     * Comments are defined with '#' followed by a quoted string after the argument:
-     * - {name}#'comment' becomes {name}
-     * - {name*>[values]}#'comment' becomes {name*>[values]}
-     * - ::name->[values]#'comment' becomes ::name->[values]
-     * - {--flag}#'comment' becomes {--flag}
-     *
-     * Comments can use single quotes (') or double quotes (").
-     *
-     * @param  string  $signature  The signature with comments
-     * @return string The signature without comments
-     */
-    private function cleanSignatureComments(string $signature): string
-    {
-        // Pattern pour les arguments entre accolades avec commentaire
-        // {name}#'comment' ou {name*>[values]}#'comment'
-        $pattern = '/\{([^}]+)\}#\s*([\'"])([^\'"]*)\2/';
-        $cleaned = preg_replace_callback($pattern, function ($matches) {
-            return '{'.$matches[1].'}';
-        }, $signature);
-
-        // Pattern pour les enums ::name->[values]#'comment'
-        $pattern = '/(::[a-zA-Z_][a-zA-Z0-9_]*->\[[^\]]+\](?:=[^ ]+)?)#\s*([\'"])([^\'"]*)\2/';
-        $cleaned = preg_replace_callback($pattern, function ($matches) {
-            return $matches[1];
-        }, $cleaned);
-
-        return $cleaned;
     }
 
     /**
@@ -550,44 +521,50 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
     {
         $requireds = new ArgumentCollection;
         foreach ($data['requireds'] ?? [] as $name => $value) {
-            $requireds->add(new ArgumentRecord($name, $value));
+            $comment = $this->commentManager->getComment($name);
+            $requireds->add(new ArgumentRecord($name, $value, $comment));
         }
 
         $defaults = new ArgumentCollection;
         foreach ($data['defaults'] ?? [] as $name => $value) {
-            $defaults->add(new ArgumentRecord($name, $value));
+            $comment = $this->commentManager->getComment($name);
+            $defaults->add(new ArgumentRecord($name, $value, $comment));
         }
 
         $variadics = new VariadicArgumentCollection;
         $variadicData = $data['variadics'] ?? [];
         foreach ($variadicData as $name => $values) {
-            // Vérifier si des restrictions sont stockées séparément
             $restrictions = new StringTypedCollection;
             if (isset($data['restrictions'][$name])) {
                 $restrictions = StringTypedCollection::from($data['restrictions'][$name]);
             }
 
+            $comment = $this->commentManager->getComment($name);
             $variadics->add(new VariadicArgumentRecord(
                 $name,
                 StringTypedCollection::from($values),
-                $restrictions
+                $restrictions,
+                $comment
             ));
         }
 
         $flags = new FlagCollection;
         foreach ($data['flags'] ?? [] as $name => $value) {
-            $flags->add(new FlagRecord($name, $value));
+            $comment = $this->commentManager->getComment('--'.$name);
+            $flags->add(new FlagRecord($name, $value, $comment));
         }
 
         // Build EnumCollection
         $enums = new EnumCollection;
         foreach ($data['enums'] ?? [] as $name => $enumData) {
+            $comment = $this->commentManager->getComment($name);
             $enums->add(new EnumRecord(
                 name: $name,
                 value: $enumData['value'] ?? null,
                 allowed_values: StringTypedCollection::from($enumData['allowed_values'] ?? []),
                 default_value: $enumData['default_value'] ?? null,
                 value_state: $enumData['value_state'] ?? ValueState::OPTIONAL,
+                comment: $comment,
             ));
         }
 

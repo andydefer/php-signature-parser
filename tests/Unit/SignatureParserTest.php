@@ -1707,4 +1707,203 @@ final class SignatureParserTest extends TestCase
         $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
         $this->assertTrue($result->flags->first()->value);
     }
+
+    // ==================== COMMENT TESTS WITH COMMENTS IN RECORDS ====================
+
+    public function test_parse_signature_with_comments_stores_comment_in_required_record(): void
+    {
+        $signature = 'command {name}#"The user name" {--verbose}';
+        $query = 'command John --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame('The user name', $result->requireds->first()->comment);
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertNull($result->flags->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_stores_comment_in_default_record(): void
+    {
+        $signature = 'command {format=zip}#"The output format" {--verbose}';
+        $query = 'command tar.gz --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertSame('The output format', $result->defaults->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_stores_comment_in_variadic_record(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}#"The allowed roles" {--verbose}';
+        $query = 'command [admin,editor] --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
+        $this->assertSame('The allowed roles', $result->variadics->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_stores_comment_in_enum_record(): void
+    {
+        $signature = 'command ::level->[low,medium,high]=medium#"The priority level" {--verbose}';
+        $query = 'command high --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('high', $result->enums->get('level'));
+        $this->assertSame('The priority level', $result->enums->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_stores_comment_in_flag_record(): void
+    {
+        $signature = 'command {--force}#"Force the operation" {--verbose}';
+        $query = 'command --force';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertSame('Force the operation', $result->flags->first()->comment);
+        $this->assertNull($result->flags->last()->comment);
+    }
+
+    public function test_parse_signature_with_multiple_comments_stores_all_comments(): void
+    {
+        $signature = 'command {name}#"The user name" {role*>[admin,editor]}#"The user role" {--verbose}#"Show details"';
+        $query = 'command John [admin] --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame('The user name', $result->requireds->first()->comment);
+        $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
+        $this->assertSame('The user role', $result->variadics->first()->comment);
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertSame('Show details', $result->flags->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_using_single_quotes_stores_comment(): void
+    {
+        $signature = "command {name}#'The user name' {--verbose}";
+        $query = 'command John --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame('The user name', $result->requireds->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_containing_special_characters_stores_comment(): void
+    {
+        $signature = 'command {name}#"User name (e.g., John Doe)" {--force}#"Force mode (use with caution!)"';
+        $query = 'command John --force';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame('User name (e.g., John Doe)', $result->requireds->first()->comment);
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertSame('Force mode (use with caution!)', $result->flags->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_preserves_all_data_with_comments(): void
+    {
+        $signature = 'backup {source}#"Source directory" {destination}#"Destination directory" {format=zip}#"Archive format" {excludes*}#"Files to exclude" {--force}#"Force overwrite"';
+        $query = 'backup /var/www /backup tar.gz [cache, logs] --force';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('backup', $result->source);
+
+        $this->assertSame('/var/www', $result->requireds->first()->value);
+        $this->assertSame('Source directory', $result->requireds->first()->comment);
+        $this->assertSame('/backup', $result->requireds->last()->value);
+        $this->assertSame('Destination directory', $result->requireds->last()->comment);
+
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertSame('Archive format', $result->defaults->first()->comment);
+
+        $this->assertSame(['cache', 'logs'], $result->variadics->first()->values->toArray());
+        $this->assertSame('Files to exclude', $result->variadics->first()->comment);
+
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertSame('Force overwrite', $result->flags->first()->comment);
+    }
+
+    public function test_parse_enum_with_comment_and_default_value_stores_comment(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle#"The user skill level"';
+        $query = 'set-level master';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('set-level', $result->source);
+        $this->assertSame('master', $result->enums->get('level'));
+        $this->assertSame(['beginner', 'middle', 'master'], $result->enums->getAllowedValues('level'));
+        $this->assertSame('The user skill level', $result->enums->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_and_no_query(): void
+    {
+        $signature = 'command {name}#"The user name" {--verbose}#"Show details"';
+        $query = 'command';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame('', $result->requireds->first()->value);
+        $this->assertSame('The user name', $result->requireds->first()->comment);
+        $this->assertFalse($result->flags->first()->value);
+        $this->assertSame('Show details', $result->flags->first()->comment);
+    }
+
+    public function test_parse_signature_with_comments_on_restricted_variadic_stores_comment(): void
+    {
+        $signature = 'command {roles*>[admin,editor,viewer]}#"The allowed roles" {--verbose}';
+        $query = 'command [admin,editor] --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('command', $result->source);
+        $this->assertSame(['admin', 'editor'], $result->variadics->first()->values->toArray());
+        $this->assertSame('The allowed roles', $result->variadics->first()->comment);
+        $this->assertTrue($result->flags->first()->value);
+    }
+
+    public function test_parse_signature_with_mixed_commented_and_uncommented_arguments(): void
+    {
+        $signature = 'command {name}#"User name" {format=zip} {role*>[admin,editor]}#"Roles" {--verbose}';
+        $query = 'command John tar.gz [admin] --verbose';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('John', $result->requireds->first()->value);
+        $this->assertSame('User name', $result->requireds->first()->comment);
+
+        $this->assertSame('tar.gz', $result->defaults->first()->value);
+        $this->assertNull($result->defaults->first()->comment);
+
+        $this->assertSame(['admin'], $result->variadics->first()->values->toArray());
+        $this->assertSame('Roles', $result->variadics->first()->comment);
+
+        $this->assertTrue($result->flags->first()->value);
+        $this->assertNull($result->flags->first()->comment);
+    }
+
+    public function test_validate_signature_with_comments_does_not_affect_validation(): void
+    {
+        $signature = 'command {name}#"User name" {role*>[admin,editor]}#"Role" {--force}#"Force mode"';
+
+        $result = $this->parser->validateSignature($signature);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
 }

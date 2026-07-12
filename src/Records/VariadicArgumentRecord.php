@@ -16,5 +16,6 @@ final class VariadicArgumentRecord extends AbstractRecord
         public readonly string $name,
         public readonly StringTypedCollection $values,
         public readonly StringTypedCollection $restrictions = new StringTypedCollection,
+        public readonly ?string $comment = null,
     ) {}
 }
