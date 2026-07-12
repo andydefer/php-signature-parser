@@ -1,4 +1,4 @@
-# Parsers - Référence Technique
+# ParserInterface & Parsers - Référence Technique
 
 ## Description
 
@@ -30,7 +30,15 @@ Chaque parser est responsable d'un type d'argument spécifique :
 SourceParser → RequiredParser → DefaultParser → EnumParser → VariadicParser → FlagParser → CustomTagParser
 ```
 
-## API commune
+---
+
+# ParserInterface
+
+## Description
+
+Interface définissant le contrat pour tous les parsers de la chaîne de responsabilité.
+
+## API
 
 ### `parse(array $signature, array $query): ParsedResultRecord`
 
@@ -40,15 +48,6 @@ SourceParser → RequiredParser → DefaultParser → EnumParser → VariadicPar
 | `$query` | `array<int, string>` | Tokens de la requête |
 
 **Retourne :** `ParsedResultRecord` - Contient les données extraites, la signature restante et la requête restante
-
-**Exemple :**
-```php
-$parser = new RequiredParser();
-$result = $parser->parse(['source', 'destination'], ['/var/www', '/backup']);
-// $result->data->toArray() = ['source' => '/var/www', 'destination' => '/backup']
-// $result->signature = [] (signature restante)
-// $result->query = [] (requête restante)
-```
 
 ### `validate(array $signature, array $query): ValidationResultRecord`
 
@@ -65,22 +64,20 @@ $result = $parser->parse(['source', 'destination'], ['/var/www', '/backup']);
 
 ---
 
-## 1. SourceParser
+# SourceParser
 
-### Description
+## Description
 
 Extrait le nom de la commande (source) depuis la signature et la requête. C'est le premier parser exécuté.
 
-### Rôle principal
+## Rôle principal
 
 - Extrait le premier token de la signature comme nom de commande
 - Retire ce token des tableaux pour les parsers suivants
 
-### API
+## API
 
-```php
-public function parse(array $signature, array $query): ParsedResultRecord
-```
+### `parse(array $signature, array $query): ParsedResultRecord`
 
 **Exemple :**
 ```php
@@ -91,9 +88,16 @@ $result = $parser->parse(['backup', 'source'], ['backup', '/var/www']);
 // $result->query = ['/var/www']
 ```
 
-### Cas d'utilisation
+### `validate(array $signature, array $query): ValidationResultRecord`
 
-#### Cas 1 : Commande simple
+| Situation | Message |
+|-----------|---------|
+| Signature vide | `Missing source (command name)` |
+| Requête vide | `Missing query` |
+
+## Cas d'utilisation
+
+### Cas : Commande simple
 ```php
 $sourceParser = new SourceParser();
 $result = $sourceParser->parse(
@@ -103,32 +107,23 @@ $result = $sourceParser->parse(
 // $result->data->toArray() = ['source' => 'deploy']
 ```
 
-### Validation
-
-| Situation | Exception/Erreur | Message |
-|-----------|------------------|---------|
-| Signature vide | Erreur de validation | `Missing source (command name)` |
-| Requête vide | Erreur de validation | `Missing query` |
-
 ---
 
-## 2. RequiredParser
+# RequiredParser
 
-### Description
+## Description
 
 Extrait les arguments requis de la signature. Un argument requis est un token simple (sans `=`, `*`, `?` ou `--`).
 
-### Rôle principal
+## Rôle principal
 
 - Identifie les tokens simples dans la signature
 - Associe chaque token à la valeur correspondante dans la requête
 - Utilise `~` comme placeholder pour les valeurs manquantes
 
-### API
+## API
 
-```php
-public function parse(array $signature, array $query): ParsedResultRecord
-```
+### `parse(array $signature, array $query): ParsedResultRecord`
 
 **Exemple :**
 ```php
@@ -137,25 +132,25 @@ $result = $parser->parse(
     ['source', 'destination'],
     ['/var/www', '/backup']
 );
-// $result->data->toArray() = ['source' => '/var/www', 'destination' => '/backup']
+// $result->data->toArray() = ['requireds' => ['source' => '/var/www', 'destination' => '/backup']]
 ```
 
-### Cas d'utilisation
+## Cas d'utilisation
 
-#### Cas 1 : Arguments requis simples
+### Cas 1 : Arguments requis simples
 ```php
 $parser = new RequiredParser();
 $result = $parser->parse(['name', 'email'], ['John', 'john@example.com']);
-// ['name' => 'John', 'email' => 'john@example.com']
+// ['requireds' => ['name' => 'John', 'email' => 'john@example.com']]
 ```
 
-#### Cas 2 : Valeur manquante
+### Cas 2 : Valeur manquante
 ```php
 $result = $parser->parse(['name'], ['']);
-// ['name' => '']
+// ['requireds' => ['name' => '']]
 ```
 
-### Validation
+## Validation
 
 | Situation | Message |
 |-----------|---------|
@@ -163,23 +158,21 @@ $result = $parser->parse(['name'], ['']);
 
 ---
 
-## 3. DefaultParser
+# DefaultParser
 
-### Description
+## Description
 
 Extrait les arguments avec valeur par défaut et les arguments nullables.
 
-### Rôle principal
+## Rôle principal
 
 - Traite les tokens avec `=` (valeur par défaut)
 - Gère les nullables avec `{name=?}`
 - Utilise `~` comme valeur nulle explicite
 
-### API
+## API
 
-```php
-public function parse(array $signature, array $query): ParsedResultRecord
-```
+### `parse(array $signature, array $query): ParsedResultRecord`
 
 **Exemple :**
 ```php
@@ -188,31 +181,30 @@ $result = $parser->parse(
     ['format=zip', 'output=?'],
     ['tar.gz']
 );
-// $result->data->toArray() = ['format' => 'tar.gz', 'output' => null]
-// 'output' utilise la valeur par défaut '?'
+// $result->data->toArray() = ['defaults' => ['format' => 'tar.gz', 'output' => null]]
 ```
 
-### Cas d'utilisation
+## Cas d'utilisation
 
-#### Cas 1 : Valeur par défaut fournie
+### Cas 1 : Valeur par défaut fournie
 ```php
 $result = $parser->parse(['format=zip'], ['tar.gz']);
-// ['format' => 'tar.gz']
+// ['defaults' => ['format' => 'tar.gz']]
 ```
 
-#### Cas 2 : Valeur par défaut utilisée
+### Cas 2 : Valeur par défaut utilisée
 ```php
 $result = $parser->parse(['format=zip'], []);
-// ['format' => 'zip']
+// ['defaults' => ['format' => 'zip']]
 ```
 
-#### Cas 3 : Nullable avec `~`
+### Cas 3 : Nullable avec `~`
 ```php
 $result = $parser->parse(['output=?'], ['~']);
-// ['output' => null]
+// ['defaults' => ['output' => null]]
 ```
 
-### Validation
+## Validation
 
 | Situation | Message |
 |-----------|---------|
@@ -221,19 +213,19 @@ $result = $parser->parse(['output=?'], ['~']);
 
 ---
 
-## 4. EnumParser
+# EnumParser
 
-### Description
+## Description
 
 Extrait les arguments de type énumération avec valeurs autorisées et états (requis, optionnel, défaut).
 
-### Rôle principal
+## Rôle principal
 
 - Parse la syntaxe `::name->[value1,value2,value3]=state`
 - Gère les trois états : `*` (requis), `?` (optionnel), `valeur` (défaut)
 - Valide les valeurs autorisées et la valeur par défaut
 
-### Syntaxe
+## Syntaxe
 
 | Syntaxe | État | Description |
 |---------|------|-------------|
@@ -241,11 +233,9 @@ Extrait les arguments de type énumération avec valeurs autorisées et états (
 | `::name->[values]=?` | OPTIONAL | Peut être `~` |
 | `::name->[values]=default` | DEFAULTED | Valeur par défaut |
 
-### API
+## API
 
-```php
-public function parse(array $signature, array $query): ParsedResultRecord
-```
+### `parse(array $signature, array $query): ParsedResultRecord`
 
 **Exemple :**
 ```php
@@ -255,7 +245,7 @@ $result = $parser->parse(
     ['high']
 );
 // $result->data->toArray() = [
-//     'enum' => [
+//     'enums' => [
 //         'level' => [
 //             'value' => 'high',
 //             'allowed_values' => ['low', 'medium', 'high'],
@@ -266,9 +256,9 @@ $result = $parser->parse(
 // ]
 ```
 
-### Cas d'utilisation
+## Cas d'utilisation
 
-#### Cas 1 : Enum avec valeur par défaut
+### Cas 1 : Enum avec valeur par défaut
 ```php
 $result = $parser->parse(
     ['::level->[low,medium,high]=medium'],
@@ -277,7 +267,7 @@ $result = $parser->parse(
 // value = 'high'
 ```
 
-#### Cas 2 : Enum requis
+### Cas 2 : Enum requis
 ```php
 $result = $parser->parse(
     ['::level->[low,medium,high]=*'],
@@ -286,7 +276,7 @@ $result = $parser->parse(
 // value = 'medium', value_state = REQUIRED
 ```
 
-#### Cas 3 : Enum optionnel avec `~`
+### Cas 3 : Enum optionnel avec `~`
 ```php
 $result = $parser->parse(
     ['::level->[low,medium,high]=?'],
@@ -295,7 +285,7 @@ $result = $parser->parse(
 // value = null, value_state = OPTIONAL
 ```
 
-### Validation
+## Validation
 
 | Situation | Message |
 |-----------|---------|
@@ -307,30 +297,28 @@ $result = $parser->parse(
 
 ---
 
-## 5. VariadicParser
+# VariadicParser
 
-### Description
+## Description
 
 Extrait les arguments variadiques, avec support des valeurs restreintes.
 
-### Rôle principal
+## Rôle principal
 
 - Traite la syntaxe simple `{name*}` et restreinte `{name*>[values]}`
 - Valide les valeurs autorisées pour les variadics restreints
 - Gère les multiples valeurs entre crochets
 
-### Syntaxe
+## Syntaxe
 
 | Syntaxe | Description |
 |---------|-------------|
 | `{name*}` | Variadic simple, toutes valeurs autorisées |
 | `{name*>[val1,val2]}` | Variadic restreint, valeurs autorisées uniquement |
 
-### API
+## API
 
-```php
-public function parse(array $signature, array $query): ParsedResultRecord
-```
+### `parse(array $signature, array $query): ParsedResultRecord`
 
 **Exemple :**
 ```php
@@ -339,30 +327,30 @@ $result = $parser->parse(
     ['roles*>[admin,editor,viewer]'],
     ['[admin,editor]']
 );
-// $result->data->toArray() = ['variadic' => ['roles' => ['admin', 'editor']]]
+// $result->data->toArray() = ['variadics' => ['roles' => ['admin', 'editor']]]
 ```
 
-### Cas d'utilisation
+## Cas d'utilisation
 
-#### Cas 1 : Variadic simple
+### Cas 1 : Variadic simple
 ```php
 $result = $parser->parse(['files*'], ['[file1.txt, file2.txt]']);
-// ['files' => ['file1.txt', 'file2.txt']]
+// ['variadics' => ['files' => ['file1.txt', 'file2.txt']]]
 ```
 
-#### Cas 2 : Variadic restreint
+### Cas 2 : Variadic restreint
 ```php
 $result = $parser->parse(['roles*>[admin,editor]'], ['[admin,editor]']);
-// ['roles' => ['admin', 'editor']]
+// ['variadics' => ['roles' => ['admin', 'editor']]]
 ```
 
-#### Cas 3 : Variadic vide
+### Cas 3 : Variadic vide
 ```php
 $result = $parser->parse(['files*'], ['[]']);
-// ['files' => []]
+// ['variadics' => ['files' => []]]
 ```
 
-### Validation
+## Validation
 
 | Situation | Message |
 |-----------|---------|
@@ -373,23 +361,21 @@ $result = $parser->parse(['files*'], ['[]']);
 
 ---
 
-## 6. FlagParser
+# FlagParser
 
-### Description
+## Description
 
 Extrait les flags booléens de la commande.
 
-### Rôle principal
+## Rôle principal
 
 - Identifie les flags avec `--flag`
 - Détermine si un flag est présent ou non
 - Détecte les flags dupliqués
 
-### API
+## API
 
-```php
-public function parse(array $signature, array $query): ParsedResultRecord
-```
+### `parse(array $signature, array $query): ParsedResultRecord`
 
 **Exemple :**
 ```php
@@ -401,27 +387,21 @@ $result = $parser->parse(
 // $result->data->toArray() = ['flags' => ['force' => true, 'verbose' => false]]
 ```
 
-### Cas d'utilisation
+## Cas d'utilisation
 
-#### Cas 1 : Flag présent
+### Cas 1 : Flag présent
 ```php
 $result = $parser->parse(['--force'], ['--force']);
-// ['force' => true]
+// ['flags' => ['force' => true]]
 ```
 
-#### Cas 2 : Flag absent
+### Cas 2 : Flag absent
 ```php
 $result = $parser->parse(['--force'], []);
-// ['force' => false]
+// ['flags' => ['force' => false]]
 ```
 
-#### Cas 3 : Multiples flags
-```php
-$result = $parser->parse(['--force', '--verbose'], ['--force']);
-// ['force' => true, 'verbose' => false]
-```
-
-### Validation
+## Validation
 
 | Situation | Message |
 |-----------|---------|
@@ -430,23 +410,21 @@ $result = $parser->parse(['--force', '--verbose'], ['--force']);
 
 ---
 
-## 7. CustomTagParser
+# CustomTagParser
 
-### Description
+## Description
 
 Extrait les tags personnalisés de la requête.
 
-### Rôle principal
+## Rôle principal
 
 - Parse la syntaxe `<key="value">` ou `<key='value'>`
 - Extrait les paires clé-valeur
 - Nettoie la requête des tags pour les parsers suivants
 
-### API
+## API
 
-```php
-public function parse(array $signature, array $query): ParsedResultRecord
-```
+### `parse(array $signature, array $query): ParsedResultRecord`
 
 **Exemple :**
 ```php
@@ -459,33 +437,27 @@ $result = $parser->parse(
 // $result->query = []
 ```
 
-### Cas d'utilisation
+## Cas d'utilisation
 
-#### Cas 1 : Tag simple
+### Cas 1 : Tag simple
 ```php
 $result = $parser->parse([], ['<format="json">']);
 // ['format' => 'json']
 ```
 
-#### Cas 2 : Tag avec guillemets simples
+### Cas 2 : Tag avec guillemets simples
 ```php
 $result = $parser->parse([], ["<user='admin'>"]);
 // ['user' => 'admin']
 ```
 
-#### Cas 3 : Tags multiples
+### Cas 3 : Tags multiples
 ```php
 $result = $parser->parse([], ['<user="admin">', '<role="editor">']);
 // ['user' => 'admin', 'role' => 'editor']
 ```
 
-#### Cas 4 : Tag avec espaces dans la valeur
-```php
-$result = $parser->parse([], ['<greeting="Hello World">']);
-// ['greeting' => 'Hello World']
-```
-
-### Validation
+## Validation
 
 | Situation | Message |
 |-----------|---------|
@@ -587,10 +559,10 @@ print_r($data);
 /*
 [
     'source' => 'backup',
-    'required' => ['source' => '/var/www', 'destination' => '/backup'],
-    'default' => ['format' => 'tar.gz'],
-    'enum' => ['level' => ['value' => 'high', ...]],
-    'variadic' => ['excludes' => ['cache', 'logs']],
+    'requireds' => ['source' => '/var/www', 'destination' => '/backup'],
+    'defaults' => ['format' => 'tar.gz'],
+    'enums' => ['level' => ['value' => 'high', ...]],
+    'variadics' => ['excludes' => ['cache', 'logs']],
     'flags' => ['force' => true],
     'user' => 'admin'
 ]

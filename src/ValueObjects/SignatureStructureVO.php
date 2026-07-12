@@ -7,6 +7,7 @@ namespace AndyDefer\SignatureParser\ValueObjects;
 use AndyDefer\DomainStructures\Abstracts\AbstractValueObject;
 use AndyDefer\DomainStructures\Utils\StrictDataObject;
 use AndyDefer\SignatureParser\Records\ValidationResultRecord;
+use AndyDefer\SignatureParser\SignatureDocumentor;
 use AndyDefer\SignatureParser\SignatureParser;
 use InvalidArgumentException;
 
@@ -101,7 +102,7 @@ final class SignatureStructureVO extends AbstractValueObject
     /**
      * Returns the structured representation of the signature.
      */
-    public function getStucture(): StrictDataObject
+    public function getStructure(): StrictDataObject
     {
         return $this->structure;
     }
@@ -335,6 +336,63 @@ final class SignatureStructureVO extends AbstractValueObject
     {
         return $this->validationResult;
     }
+
+    // ==================== DOCUMENTATION METHODS ====================
+
+    /**
+     * Generates documentation for the signature in the specified format.
+     *
+     * @param  string  $format  The output format ('markdown', 'text', 'json', or 'array')
+     * @return string|array The generated documentation
+     *
+     * @throws InvalidArgumentException If the format is unsupported
+     */
+    public function document(string $format = 'markdown'): string|array
+    {
+        return SignatureDocumentor::generate($this->rawSignature, $format);
+    }
+
+    /**
+     * Generates Markdown documentation for the signature.
+     *
+     * @return string The Markdown documentation
+     */
+    public function documentInMarkdown(): string
+    {
+        return (string) $this->document('markdown');
+    }
+
+    /**
+     * Generates plain text documentation for the signature.
+     *
+     * @return string The plain text documentation
+     */
+    public function documentInText(): string
+    {
+        return (string) $this->document('text');
+    }
+
+    /**
+     * Generates JSON documentation for the signature.
+     *
+     * @return string The JSON documentation
+     */
+    public function documentInJson(): string
+    {
+        return (string) $this->document('json');
+    }
+
+    /**
+     * Generates array documentation for the signature.
+     *
+     * @return array<string, mixed> The array documentation
+     */
+    public function documentInArray(): array
+    {
+        return (array) $this->document('array');
+    }
+
+    // ==================== END DOCUMENTATION METHODS ====================
 
     /**
      * {@inheritDoc}

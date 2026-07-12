@@ -6,6 +6,7 @@ namespace AndyDefer\SignatureParser\Tests\Unit;
 
 use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
 use AndyDefer\SignatureParser\Parsers\EnumParser;
+use AndyDefer\SignatureParser\SignatureDocumentor;
 use AndyDefer\SignatureParser\SignatureParser;
 use AndyDefer\SignatureParser\Tests\Fixtures\CustomParser;
 use InvalidArgumentException;
@@ -1646,6 +1647,8 @@ final class SignatureParserTest extends TestCase
     public function test_signature_validation_passes_with_comments_on_all_argument_types(): void
     {
         $signature = 'command {name}#"User name" {format=zip}#"Output format"  ::level->[low,high]#"Priority" {roles*>[admin,editor]}#"Roles"  {--force}#"Force"';
+
+        $result = SignatureDocumentor::generate($signature, 'array');
 
         $result = $this->parser->validateSignature($signature);
 

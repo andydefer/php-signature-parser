@@ -2,52 +2,27 @@
 
 ## Description
 
-Constructeur de requêtes CLI qui permet de construire dynamiquement des chaînes de requête à partir d'une signature, avec validation automatique des types.
-
-## Hiérarchie / Implémentations
-
-```
-QueryBuilder
-    ├── SignatureStructureVO (structure)
-    └── SignatureParser (validation)
-```
+Le `QueryBuilder` est un constructeur de requêtes CLI qui permet de construire des requêtes valides à partir d'une signature, avec validation automatique des arguments. Il gère tous les types d'arguments : requis, par défaut, nullables, variadics, enums, flags et tags personnalisés.
 
 ## Rôle principal
 
-`QueryBuilder` est un assistant pour la construction programmatique de requêtes CLI. Il permet de :
+- Construire des requêtes CLI valides à partir d'une signature
+- Valider automatiquement les valeurs par rapport à la signature
+- Gérer les valeurs par défaut et les placeholders (`~`)
+- Fournir une API fluide pour définir chaque type d'argument
 
-- Construire une requête à partir d'une signature
-- Définir des arguments requis, par défaut, nullables et variadiques
-- Accepter des tableaux ou des chaînes pour les arguments variadiques
-- Activer/désactiver des flags
-- Ajouter des tags personnalisés `<key="value">`
-- Valider automatiquement la requête avant construction
-- Parser une requête initiale pour la modifier
-
-## Installation
-
-```bash
-composer require andydefer/php-signature-parser
-```
-
-### Dépendances
-
-- `SignatureStructureVO` - Structure de la signature
-- `SignatureParser` - Parser pour la validation
-- `ValidationResultRecord` - Résultat de validation
-- `StringTypedCollection` - Collection typée de chaînes
-- PHP 8.1+
+---
 
 ## API / Méthodes publiques
 
-### `static init(string $signature, ?string $initialQuery = null): self`
+### `init(string $signature, ?string $initialQuery = null): self`
 
 Initialise un nouveau QueryBuilder avec une signature.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$signature` | `string` | Signature CLI (ex: `'greet {name} {--formal}'`) |
-| `$initialQuery` | `string|null` | Requête initiale optionnelle |
+| `$signature` | `string` | Signature de la commande |
+| `$initialQuery` | `string|null` | Requête initiale optionnelle pour peupler le builder |
 
 **Retourne :** `self` - Instance du builder
 
@@ -55,7 +30,8 @@ Initialise un nouveau QueryBuilder avec une signature.
 
 **Exemple :**
 ```php
-$builder = QueryBuilder::init('greet {name} {--formal}');
+$builder = QueryBuilder::init('backup {source} {destination} {--force}');
+$builder = QueryBuilder::init('backup {source}', 'backup /var/www');
 ```
 
 ---
@@ -67,16 +43,15 @@ Définit un argument avec détection automatique du type.
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
-| `$value` | `string|null` | Valeur (null = valeur par défaut) |
+| `$value` | `string|null` | Valeur (null réinitialise à la valeur par défaut) |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
 
 **Exceptions :** `InvalidArgumentException` - Si l'argument n'existe pas
 
 **Exemple :**
 ```php
-$builder->setArgument('name', 'John');
-$builder->setArgument('age', null); // Utilise la valeur par défaut
+$builder->setArgument('source', '/var/www');
 ```
 
 ---
@@ -90,9 +65,14 @@ Définit un argument requis.
 | `$name` | `string` | Nom de l'argument |
 | `$value` | `string` | Valeur |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
 
-**Exceptions :** `InvalidArgumentException` - Si l'argument n'est pas requis ou est vide
+**Exceptions :** `InvalidArgumentException` - Si l'argument n'est pas requis ou si la valeur est vide
+
+**Exemple :**
+```php
+$builder->setRequired('source', '/var/www');
+```
 
 ---
 
@@ -103,11 +83,17 @@ Définit un argument par défaut.
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
-| `$value` | `string|null` | Valeur (null = valeur par défaut) |
+| `$value` | `string|null` | Valeur (null utilise la valeur par défaut) |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
 
 **Exceptions :** `InvalidArgumentException` - Si l'argument n'est pas un argument par défaut
+
+**Exemple :**
+```php
+$builder->setDefault('format', 'zip');
+$builder->setDefault('output', null); // Utilise la valeur par défaut
+```
 
 ---
 
@@ -118,20 +104,37 @@ Définit un argument variadique.
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
-| `$value` | `string|array<string>` | Valeurs (chaîne séparée par des virgules ou tableau) |
+| `$value` | `string|array<string>` | Valeur (chaîne ou tableau) |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
 
 **Exceptions :** `InvalidArgumentException` - Si l'argument n'est pas variadique
 
 **Exemple :**
 ```php
-// Avec une chaîne
-$builder->setVariadic('files', 'file1.txt, file2.txt, file3.txt');
+$builder->setVariadic('files', 'file1.txt, file2.txt');
+$builder->setVariadic('files', ['file1.txt', 'file2.txt']);
+```
 
-// Avec un tableau
-$builder->setVariadic('files', ['file1.txt', 'file2.txt', 'file3.txt']);
-// Résultat: [file1.txt, file2.txt, file3.txt]
+---
+
+### `setEnum(string $name, ?string $value = null): self`
+
+Définit une énumération.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'énumération |
+| `$value` | `string|null` | Valeur (null utilise la valeur par défaut) |
+
+**Retourne :** `self` - Instance du builder
+
+**Exceptions :** `InvalidArgumentException` - Si l'énumération n'existe pas ou si la valeur n'est pas autorisée
+
+**Exemple :**
+```php
+$builder->setEnum('level', 'high');
+$builder->setEnum('level', null); // Utilise la valeur par défaut
 ```
 
 ---
@@ -142,24 +145,37 @@ Définit un flag.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom du flag avec `--` (ex: `--verbose`) |
+| `$name` | `string` | Nom du flag avec '--' |
 | `$active` | `bool` | État du flag |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
 
 **Exceptions :** `InvalidArgumentException` - Si le flag n'existe pas
+
+**Exemple :**
+```php
+$builder->setFlag('--force', true);
+$builder->setFlag('--verbose');
+```
 
 ---
 
 ### `toggleFlag(string $name): self`
 
-Bascule l'état d'un flag.
+Inverse l'état d'un flag.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom du flag avec `--` |
+| `$name` | `string` | Nom du flag avec '--' |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
+
+**Exceptions :** `InvalidArgumentException` - Si le flag n'existe pas
+
+**Exemple :**
+```php
+$builder->toggleFlag('--verbose'); // Inverse l'état
+```
 
 ---
 
@@ -169,9 +185,16 @@ Vérifie si un flag est actif.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom du flag avec `--` |
+| `$name` | `string` | Nom du flag avec '--' |
 
-**Retourne :** `bool` - `true` si le flag est actif
+**Retourne :** `bool` - `true` si actif, `false` sinon
+
+**Exemple :**
+```php
+if ($builder->hasFlag('--force')) {
+    echo "Mode force activé";
+}
+```
 
 ---
 
@@ -184,12 +207,12 @@ Définit un tag personnalisé.
 | `$key` | `string` | Clé du tag |
 | `$value` | `string` | Valeur du tag |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
 
 **Exemple :**
 ```php
+$builder->setCustom('user', 'admin');
 $builder->setCustom('greeting', 'Hello World');
-// Résultat: <greeting="Hello World">
 ```
 
 ---
@@ -200,9 +223,17 @@ Définit plusieurs tags personnalisés.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$tags` | `array<string, string>` | Tableau associatif clé => valeur |
+| `$tags` | `array<string, string>` | Tableau [clé => valeur] |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
+
+**Exemple :**
+```php
+$builder->setCustoms([
+    'user' => 'admin',
+    'greeting' => 'Hello World'
+]);
+```
 
 ---
 
@@ -212,9 +243,14 @@ Supprime un tag personnalisé.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$key` | `string` | Clé du tag à supprimer |
+| `$key` | `string` | Clé du tag |
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
+
+**Exemple :**
+```php
+$builder->removeCustom('greeting');
+```
 
 ---
 
@@ -226,7 +262,7 @@ Récupère la valeur d'un tag personnalisé.
 |-----------|------|-------------|
 | `$key` | `string` | Clé du tag |
 
-**Retourne :** `string|null` - Valeur ou `null` si non trouvé
+**Retourne :** `string|null` - La valeur ou `null`
 
 ---
 
@@ -234,7 +270,7 @@ Récupère la valeur d'un tag personnalisé.
 
 Récupère tous les tags personnalisés.
 
-**Retourne :** `array<string, string>` - Tableau associatif clé => valeur
+**Retourne :** `array<string, string>` - Tableau [clé => valeur]
 
 ---
 
@@ -246,7 +282,7 @@ Récupère la valeur d'un argument.
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `string|null` - Valeur ou `null` si non défini
+**Retourne :** `string|null` - La valeur ou `null`
 
 ---
 
@@ -254,7 +290,7 @@ Récupère la valeur d'un argument.
 
 Récupère tous les arguments.
 
-**Retourne :** `array<string, string>` - Tableau associatif nom => valeur
+**Retourne :** `array<string, string>` - Tableau [nom => valeur]
 
 ---
 
@@ -262,23 +298,56 @@ Récupère tous les arguments.
 
 Récupère tous les flags.
 
-**Retourne :** `array<string, bool>` - Tableau associatif nom => état
+**Retourne :** `array<string, bool>` - Tableau [nom => booléen]
+
+---
+
+### `getEnum(string $name): ?string`
+
+Récupère la valeur d'une énumération.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'énumération |
+
+**Retourne :** `string|null` - La valeur ou `null`
+
+---
+
+### `getEnums(): array`
+
+Récupère toutes les énumérations.
+
+**Retourne :** `array<string, string>` - Tableau [nom => valeur]
 
 ---
 
 ### `reset(): self`
 
-Réinitialise tous les arguments, flags et tags à leurs valeurs par défaut.
+Réinitialise tous les arguments à leurs valeurs par défaut.
 
-**Retourne :** `self` - Instance fluide
+**Retourne :** `self` - Instance du builder
+
+**Exemple :**
+```php
+$builder->reset();
+```
 
 ---
 
 ### `validate(): ValidationResultRecord`
 
-Valide la requête actuelle contre la signature.
+Valide la requête actuelle par rapport à la signature.
 
 **Retourne :** `ValidationResultRecord` - Résultat de la validation
+
+**Exemple :**
+```php
+$result = $builder->validate();
+if (!$result->isValid) {
+    // Gérer les erreurs
+}
+```
 
 ---
 
@@ -286,7 +355,7 @@ Valide la requête actuelle contre la signature.
 
 Vérifie si la requête actuelle est valide.
 
-**Retourne :** `bool` - `true` si la requête est valide
+**Retourne :** `bool` - `true` si valide, `false` sinon
 
 ---
 
@@ -306,6 +375,12 @@ Construit la requête finale.
 
 **Exceptions :** `InvalidArgumentException` - Si la requête est invalide
 
+**Exemple :**
+```php
+$query = $builder->build();
+// 'backup /var/www /backup tar.gz --force'
+```
+
 ---
 
 ### `getStructure(): SignatureStructureVO`
@@ -318,7 +393,7 @@ Récupère la structure de la signature.
 
 ### `getSource(): string`
 
-Récupère le nom de la commande (source).
+Récupère le nom de la commande.
 
 **Retourne :** `string` - Nom de la commande
 
@@ -326,65 +401,54 @@ Récupère le nom de la commande (source).
 
 ## Cas d'utilisation
 
-### Cas 1 : Construction simple d'une requête
+### Cas 1 : Construction simple
 
 ```php
-<?php
-
-use AndyDefer\SignatureParser\QueryBuilder;
-
-$builder = QueryBuilder::init('greet {name} {--formal}');
-$builder->setRequired('name', 'John');
-$builder->setFlag('--formal', true);
-
-$query = $builder->build();
-echo $query; // 'greet John --formal'
+$builder = QueryBuilder::init('backup {source} {destination} {format=zip} {--force}');
+$query = $builder->setRequired('source', '/var/www')
+                 ->setRequired('destination', '/backup')
+                 ->setDefault('format', 'tar.gz')
+                 ->setFlag('--force', true)
+                 ->build();
+// Résultat: 'backup /var/www /backup tar.gz --force'
 ```
 
-### Cas 2 : Arguments variadiques avec tableau
+### Cas 2 : Avec énumérations
 
 ```php
-<?php
-
-$builder = QueryBuilder::init('process {files*} {--verbose}');
-$builder->setVariadic('files', ['file1.txt', 'file2.txt', 'file3.txt']);
-$builder->setFlag('--verbose', true);
-
-$query = $builder->build();
-echo $query; // 'process [file1.txt, file2.txt, file3.txt] --verbose'
+$builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle {--verbose}');
+$query = $builder->setEnum('level', 'master')
+                 ->setFlag('--verbose', true)
+                 ->build();
+// Résultat: 'set-level master --verbose'
 ```
 
-### Cas 3 : Tags personnalisés
+### Cas 3 : Avec tags personnalisés
 
 ```php
-<?php
-
 $builder = QueryBuilder::init('send {recipient} {--verbose}');
-$builder->setRequired('recipient', 'John');
-$builder->setFlag('--verbose', true);
-$builder->setCustom('greeting', 'Hello World');
-$builder->setCustom('later', 'goodby');
-
-$query = $builder->build();
-echo $query; // 'send John --verbose <greeting="Hello World"> <later="goodby">'
+$query = $builder->setRequired('recipient', 'John')
+                 ->setFlag('--verbose', true)
+                 ->setCustom('greeting', 'Hello World')
+                 ->setCustom('later', 'goodbye')
+                 ->build();
+// Résultat: 'send John --verbose <greeting="Hello World"> <later="goodbye">'
 ```
 
-### Cas 4 : Parsing d'une requête initiale
+### Cas 4 : Validation avant construction
 
 ```php
-<?php
+$builder = QueryBuilder::init('backup {source} {destination} {--force}');
+$builder->setRequired('source', '/var/www');
 
-$builder = QueryBuilder::init(
-    'send {recipient} {--verbose}',
-    'send John --verbose <greeting="Hello">'
-);
+if (!$builder->isValid()) {
+    $errors = $builder->getErrors();
+    foreach ($errors as $error) {
+        echo "Erreur: $error\n";
+    }
+}
 
-echo $builder->getRequired('recipient'); // 'John'
-echo $builder->getCustom('greeting'); // 'Hello'
-
-$builder->setCustom('greeting', 'Hello World');
 $query = $builder->build();
-echo $query; // 'send John --verbose <greeting="Hello World">'
 ```
 
 ---
@@ -392,79 +456,52 @@ echo $query; // 'send John --verbose <greeting="Hello World">'
 ## Flux d'exécution
 
 ```
-QueryBuilder::init($signature, $initialQuery)
-    ↓
-SignatureStructureVO($signature)
-    ├── Validation de la signature
-    └── Extraction des composants
-    ↓
+Signature + Query initiale (optionnelle)
+        ↓
+SignatureStructureVO (validation)
+        ↓
 Initialisation des valeurs par défaut
-    ├── Arguments par défaut
-    └── Flags (inactifs)
-    ↓
-Si initialQuery ≠ null
-    └── SignatureParser::parse()
-        ├── Extraction des valeurs
-        └── Remplissage du builder
-    ↓
-setRequired() / setDefault() / setVariadic() / setFlag() / setCustom()
-    ├── Validation de l'existence
-    ├── Mise à jour de la valeur
-    └── Retour fluide
-    ↓
-build()
-    ├── buildQueryString()
-    │   ├── Source
-    │   ├── Arguments requis
-    │   ├── Arguments par défaut
-    │   ├── Arguments variadiques ([value1, value2])
-    │   ├── Flags actifs
-    │   └── Tags personnalisés
-    ├── SignatureParser::validate()
-    └── Validation ou exception
+        ↓
+parseInitialQuery() (si fournie)
+        ↓
+┌─────────────────────────────────────────────────┐
+│ API fluide : setArgument/setRequired/etc.     │
+└─────────────────────────────────────────────────┘
+        ↓
+build() / validate()
+        ↓
+buildQueryString()
+        ↓
+Validation finale
+        ↓
+Query string
 ```
-
----
 
 ## Gestion des erreurs
 
 | Situation | Exception | Message |
 |-----------|-----------|---------|
-| Signature invalide | `InvalidArgumentException` | `Invalid signature: {errors}` |
-| Argument inexistant | `InvalidArgumentException` | `Argument "{name}" does not exist in signature` |
-| Argument requis null/empty | `InvalidArgumentException` | `Required argument "{name}" cannot be null or empty` |
-| Argument non requis (setRequired) | `InvalidArgumentException` | `Argument "{name}" is not a required argument` |
-| Argument non défaut (setDefault) | `InvalidArgumentException` | `Argument "{name}" is not a default argument` |
-| Argument non variadique | `InvalidArgumentException` | `Argument "{name}" is not a variadic argument` |
-| Flag inexistant | `InvalidArgumentException` | `Flag "{name}" does not exist in signature` |
-| Query invalide (build) | `InvalidArgumentException` | `Invalid query: {errors}` |
-
----
+| Signature invalide | `InvalidArgumentException` | `Invalid signature: ...` |
+| Argument inexistant | `InvalidArgumentException` | `Argument "{$name}" does not exist in signature` |
+| Requis null ou vide | `InvalidArgumentException` | `Required argument "{$name}" cannot be null or empty` |
+| Flag inexistant | `InvalidArgumentException` | `Flag "{$name}" does not exist in signature` |
+| Enum inexistant | `InvalidArgumentException` | `Enum "{$name}" does not exist in signature` |
+| Valeur d'enum invalide | `InvalidArgumentException` | `Invalid value "{$value}" for enum "{$name}"` |
+| Requis enum null | `InvalidArgumentException` | `Required enum "{$name}" cannot be null` |
+| Requête invalide | `InvalidArgumentException` | `Invalid query: ...` |
 
 ## Performance
 
-| Opération | Complexité | Détails |
-|-----------|------------|---------|
-| `init()` | O(n) | n = tokens dans la signature |
-| `setArgument()` | O(1) | Accès direct |
-| `setVariadic()` | O(n) | n = nombre d'éléments dans le tableau |
-| `setFlag()` | O(1) | Accès direct |
-| `setCustom()` | O(1) | Accès direct |
-| `build()` | O(n) | n = nombre d'éléments |
-| `validate()` | O(n) | n = tokens dans la requête |
-
----
+- La validation est effectuée une seule fois (lazy)
+- Les données sont stockées en mémoire dans des tableaux simples
+- `build()` effectue une validation complète
 
 ## Compatibilité
 
-| Version | Support | Notes |
-|---------|---------|-------|
-| PHP 8.4 | ✅ Complet | Support total |
-| PHP 8.3 | ✅ Complet | Support total |
-| PHP 8.2 | ✅ Complet | Support total |
-| PHP 8.1 | ✅ Complet | Support total |
-
----
+| Version PHP | Support |
+|-------------|---------|
+| PHP 8.1+ | ✅ Complet |
+| PHP 8.0 | ✅ Complet |
 
 ## Exemple complet
 
@@ -475,59 +512,28 @@ declare(strict_types=1);
 
 use AndyDefer\SignatureParser\QueryBuilder;
 
-// 1. Initialisation
 $builder = QueryBuilder::init(
-    'deploy {environment} {version=?} {files*} {--force} {--verbose}'
+    'backup {source} {destination} {format=zip} {output=?} ::level->[low,medium,high]=medium {excludes*} {--force} {--verbose}'
 );
 
-// 2. Définition des valeurs avec différents types
-$builder
-    ->setRequired('environment', 'staging')
-    ->setDefault('version', '1.2.3')
-    ->setVariadic('files', ['config.yaml', 'secrets.json', 'deploy.sh'])
+$query = $builder
+    ->setRequired('source', '/var/www')
+    ->setRequired('destination', '/backup')
+    ->setDefault('format', 'tar.gz')
+    ->setDefault('output', null)
+    ->setEnum('level', 'high')
+    ->setVariadic('excludes', ['cache', 'logs', 'tmp'])
     ->setFlag('--force', true)
-    ->setFlag('--verbose', false)
+    ->setFlag('--verbose', true)
     ->setCustom('user', 'admin')
-    ->setCustom('timestamp', '2026-07-10');
+    ->build();
 
-// 3. Validation
-if (!$builder->isValid()) {
-    echo "❌ Erreurs de validation:\n";
-    foreach ($builder->getErrors() as $error) {
-        echo "  - $error\n";
-    }
-    exit(1);
-}
-
-// 4. Construction
-$query = $builder->build();
-echo "Requête construite:\n";
-echo $query . "\n";
-// Result: 'deploy staging 1.2.3 [config.yaml, secrets.json, deploy.sh] --force <user="admin"> <timestamp="2026-07-10">'
-
-// 5. Modification et reconstruction
-$builder
-    ->setRequired('environment', 'production')
-    ->setVariadic('files', ['app.yaml', 'database.sql'])
-    ->setFlag('--force', false);
-
-$query = $builder->build();
-echo "\nNouvelle requête:\n";
-echo $query . "\n";
-// 'deploy production 1.2.3 [app.yaml, database.sql] --verbose <user="admin"> <timestamp="2026-07-10">'
-
-// 6. Reset
-$builder->reset();
-$query = $builder->build();
-echo "\nRequête après reset:\n";
-echo $query . "\n";
-// 'deploy ~ ~ --verbose'
+echo $query;
+// backup /var/www /backup tar.gz ~ high [cache, logs, tmp] --force --verbose <user="admin">
 ```
 
 ## Voir aussi
 
-- `SignatureStructureVO` - Structure de la signature
-- `SignatureParser` - Parser de signatures
-- `SignatureVO` - Value Object signature/requête
+- `SignatureStructureVO` - Structure de signature
+- `SignatureParser` - Parser principal
 - `ValidationResultRecord` - Résultat de validation
-- `StringTypedCollection` - Collection typée de chaînes

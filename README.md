@@ -1,6 +1,6 @@
 # PHP Signature Parser
 
-**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les nullables, les variadiques et les flags avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^` et des tokens spéciaux (`?`, `~`).**
+**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les nullables, les variadiques, les énumérations et les flags avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^`, des commentaires inline, des tokens spéciaux (`?`, `~`) et des tags personnalisés.**
 
 [![PHP Version](https://img.shields.io/badge/PHP-8.1%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -11,27 +11,30 @@
 
 1. [Installation](#installation)
 2. [Concepts fondamentaux](#concepts-fondamentaux)
-3. [Formatage des espaces avec `^`](#formatage-des-espaces-avec-)
-4. [Tokens spéciaux](#tokens-spéciaux)
+3. [Commentaires inline](#commentaires-inline)
+4. [Formatage des espaces avec `^`](#formatage-des-espaces-avec-)
+5. [Tokens spéciaux](#tokens-spéciaux)
    - [Le token `?` (null explicite)](#le-token--null-explicite)
    - [Le token `~` (skip)](#le-token--skip)
-5. [Ordre strict des arguments](#ordre-strict-des-arguments)
-6. [Utilisation du parseur](#utilisation-du-parseur)
-7. [Manipulation des collections](#manipulation-des-collections)
-   - [ArgumentCollection](#argumentcollection)
-   - [FlagCollection](#flagcollection)
-   - [VariadicArgumentCollection](#variadicargumentcollection)
-8. [Value Objects](#value-objects)
-   - [SignatureStructureVO](#signaturestructurevo)
-   - [SignatureVO](#signaturevo)
-9. [QueryBuilder - Construction dynamique](#querybuilder---construction-dynamique)
-10. [Tags personnalisés](#tags-personnalisés)
-11. [Extraction manuelle des éléments](#extraction-manuelle-des-éléments)
-12. [Les parseurs internes](#les-parseurs-internes)
-13. [Extensibilité](#extensibilité)
-14. [Cas d'usage avancés](#cas-dusage-avancés)
-15. [Exemples complets](#exemples-complets)
-16. [Licence](#licence)
+6. [Ordre strict des arguments](#ordre-strict-des-arguments)
+7. [Énumérations (Enum)](#énumérations-enum)
+8. [Tags personnalisés](#tags-personnalisés)
+9. [Utilisation du parseur](#utilisation-du-parseur)
+10. [Manipulation des collections](#manipulation-des-collections)
+    - [ArgumentCollection](#argumentcollection)
+    - [FlagCollection](#flagcollection)
+    - [EnumCollection](#enumcollection)
+    - [VariadicArgumentCollection](#variadicargumentcollection)
+11. [Value Objects](#value-objects)
+    - [SignatureStructureVO](#signaturestructurevo)
+    - [SignatureVO](#signaturevo)
+12. [SignatureDocumentor - Génération de documentation](#signaturedocumentor---génération-de-documentation)
+13. [QueryBuilder - Construction dynamique](#querybuilder---construction-dynamique)
+14. [Les parseurs internes](#les-parseurs-internes)
+15. [Extensibilité](#extensibilité)
+16. [Cas d'usage avancés](#cas-dusage-avancés)
+17. [Exemples complets](#exemples-complets)
+18. [Licence](#licence)
 
 ---
 
@@ -54,7 +57,7 @@ composer require andydefer/php-signature-parser
 La signature est une chaîne qui décrit la structure de la commande.
 
 ```php
-$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {purpose*} {--force} {--verbose}';
+$signature = 'backup {source} {destination} {format=zip} {env=?} ::level->[low,medium,high]=medium {excludes*} {purpose*} {--force} {--verbose}';
 ```
 
 | Élément | Syntaxe | Description |
@@ -63,16 +66,62 @@ $signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {pu
 | **Requis** | `{source}` | Argument obligatoire |
 | **Par défaut** | `{format=zip}` | Argument avec valeur par défaut |
 | **Nullable** | `{env=?}` | Argument pouvant être `null` |
+| **Enum** | `::level->[low,medium,high]=medium` | Énumération avec valeurs autorisées |
 | **Variadique** | `{excludes*}` | Argument qui capture plusieurs valeurs |
 | **Flag** | `{--force}` | Flag optionnel (booléen) |
 | **Tag personnalisé** | `<key="value">` | Données supplémentaires (non définies dans la signature) |
+| **Commentaire** | `# "comment"` | Documentation inline |
 
 ### La requête
 
 La requête est la commande réelle exécutée par l'utilisateur.
 
 ```php
-$query = 'backup /var/www /backup tar.gz staging [cache, logs, tmp] [home, data, models] --force <user="admin">';
+$query = 'backup /var/www /backup tar.gz staging high [cache, logs, tmp] [home, data, models] --force <user="admin">';
+```
+
+---
+
+## Commentaires inline
+
+Les commentaires permettent de documenter chaque argument directement dans la signature.
+
+### Syntaxe
+
+```php
+{name}#'comment'
+{name=value}#'comment'
+{name*>[values]}#'comment'
+::name->[values]#'comment'
+{--flag}#'comment'
+```
+
+### Exemples
+
+```php
+$signature = 'backup {source}#"Source directory" {destination}#"Destination" {format=zip}#"Archive format" {--force}#"Force overwrite"';
+```
+
+### Utilisation avec les records
+
+Les commentaires sont automatiquement extraits et disponibles dans les records :
+
+```php
+$result = $parser->parse($signature, $query);
+
+echo $result->requireds->first()->comment;  // 'Source directory'
+echo $result->defaults->first()->comment;   // 'Archive format'
+echo $result->flags->first()->comment;      // 'Force overwrite'
+```
+
+### Formats supportés
+
+```php
+// Guillemets doubles
+{name}#"The user name"
+
+// Guillemets simples
+{name}#'The user name'
 ```
 
 ---
@@ -90,21 +139,8 @@ Le parser remplace automatiquement les caractères `^` par des espaces dans tout
 | `John^Doe` | `John Doe` |
 | `Hello^World!` | `Hello World!` |
 | `C:/Program^Files` | `C:/Program Files` |
-| `admin^user` | `admin user` |
-| `PHP^8.4^features` | `PHP 8.4 features` |
 
-### Exemples avec commandes
-
-```bash
-# ❌ Mauvaise syntaxe
-command John Doe          # Deux arguments séparés
-command "John Doe"        # Non supporté
-
-# ✅ Bonne syntaxe
-command John^Doe          # Un seul argument avec espace
-```
-
-### Exemples de code
+### Exemples
 
 ```php
 // Arguments requis
@@ -112,19 +148,13 @@ $signature = 'user:create {name} {email}';
 $query = 'user:create John^Doe john@example.com';
 
 $result = $parser->parse($signature, $query);
-// $result->required->first()->value = 'John Doe'
+// $result->requireds->first()->value = 'John Doe'
 
 // Valeurs par défaut
 $signature = 'user:list {format=zip}';
 $query = 'user:list tar^gz';
 $result = $parser->parse($signature, $query);
-// $result->default->first()->value = 'tar gz'
-
-// Variadiques
-$signature = 'process {files*}';
-$query = 'process [file^1.txt, file^2.txt, my^file^3.txt]';
-$result = $parser->parse($signature, $query);
-// $result->variadic->first()->values = ['file 1.txt', 'file 2.txt', 'my file 3.txt']
+// $result->defaults->first()->value = 'tar gz'
 ```
 
 ---
@@ -149,15 +179,12 @@ Le token `~` permet de sauter un argument et d'utiliser la valeur par défaut ou
 | **Argument requis** | `~` → `null` |
 | **Argument par défaut** | `~` → utilise la valeur par défaut |
 | **Argument nullable** | `~` → `null` |
+| **Enum avec défaut** | `~` → utilise la valeur par défaut |
+| **Enum optionnel** | `~` → `null` |
 
 ### Exemples
 
 ```php
-// Requis → null
-$signature = 'backup {source} {destination}';
-$query = 'backup /var/www ~';
-// destination = null
-
 // Par défaut → valeur par défaut
 $signature = 'backup {source} {format=zip}';
 $query = 'backup /var/www ~';
@@ -167,16 +194,12 @@ $query = 'backup /var/www ~';
 $signature = 'deploy {env=?} {--force}';
 $query = 'deploy ~ --force';
 // env = null
+
+// Enum avec défaut
+$signature = 'set-level ::level->[low,high]=medium';
+$query = 'set-level ~';
+// level = medium
 ```
-
-### Tokens échappés
-
-| Valeur | Résultat | Description |
-|--------|----------|-------------|
-| `??` | `?` | Point d'interrogation littéral |
-| `~~` | `~` | Tilde littéral |
-| `?` | `null` | Valeur null |
-| `~` | `null` | Skip |
 
 ---
 
@@ -190,50 +213,133 @@ $query = 'deploy ~ --force';
 | **2** | **Requis** | `{name}` | `{source}` `{destination}` |
 | **3** | **Par défaut** | `{name=value}` | `{format=zip}` `{output=dist}` |
 | **4** | **Nullable** | `{name=?}` | `{env=?}` `{port=?}` |
-| **5** | **Variadique** | `{name*}` | `{excludes*}` `{purpose*}` |
-| **6** | **Flags** | `{--flag}` | `{--force}` `{--verbose}` |
-| **7** | **Tags personnalisés** | `<key="value">` | `<user="admin">` |
-
-### Règles strictes
-
-| Règle | Description |
-|-------|-------------|
-| **Source** | Toujours en première position (position 0) |
-| **Requis** | Viennent en premier, avant tous les autres |
-| **Par défaut** | Viennent après les requis, avant les nullables et variadiques |
-| **Nullable** | `{name=?}` - Viennent après les par défaut, avant les variadiques |
-| **Variadiques** | Toujours en dernière position des arguments |
-| **Flags** | Peuvent être à n'importe quelle position après la source |
-| **Tags personnalisés** | Toujours en dernière position (après les flags) |
-| **Ordre de la requête** | Doit respecter l'ordre de la signature |
+| **5** | **Enum** | `::name->[values]=state` | `::level->[low,high]=medium` |
+| **6** | **Variadique** | `{name*}` | `{excludes*}` `{purpose*}` |
+| **7** | **Flags** | `{--flag}` | `{--force}` `{--verbose}` |
+| **8** | **Tags personnalisés** | `<key="value">` | `<user="admin">` |
 
 ### Exemples d'ordre valide
 
 ```php
-// ✅ Ordre correct
-$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {--force}';
+// ✅ Ordre correct avec tous les types
+$signature = 'backup {source} {destination} {format=zip} {env=?} ::level->[low,high]=medium {excludes*} {--force}';
 
-// ✅ Flags à la fin ou entre
-$signature = 'backup {source} {--force} {destination} {format=zip}';
-
-// ✅ Tags personnalisés à la fin
-$query = 'backup /var/www /backup --force <user="admin">';
+// ✅ Commentaires à n'importe quelle position
+$signature = 'backup {source}#"Source" {destination} {--force}#"Force"';
 ```
 
 ### Exemples d'ordre invalide
 
 ```php
-// ❌ Requis après défaut
+// ❌ Enum après variadic
+$signature = 'backup {source} {excludes*} ::level->[low,high]=medium';
+
+// ❌ Required après default
 $signature = 'backup {format=zip} {source}';
+```
 
-// ❌ Variadique avant défaut
-$signature = 'backup {excludes*} {format=zip}';
+---
 
-// ❌ Flag avant arguments
-$signature = 'backup {--force} {source}';
+## Énumérations (Enum)
 
-// ❌ Tags avant flags
-$query = 'backup /var/www <user="admin"> --force';
+Les énumérations permettent de restreindre les valeurs autorisées pour un argument.
+
+### Syntaxe
+
+```php
+::name->[value1,value2,value3]=state
+```
+
+### États possibles
+
+| État | Syntaxe | Description |
+|------|---------|-------------|
+| **Requis** | `=*` | Doit être fourni |
+| **Optionnel** | `=?` | Peut être `~` |
+| **Défaut** | `=default` | Valeur par défaut |
+
+### Exemples
+
+```php
+// Avec valeur par défaut
+$signature = 'set-level ::level->[beginner,middle,master]=middle';
+$query = 'set-level master';
+// level = 'master'
+
+// Requis
+$signature = 'set-level ::level->[beginner,middle,master]=*';
+$query = 'set-level beginner';
+// level = 'beginner'
+// set-level seul échouerait
+
+// Optionnel
+$signature = 'set-level ::level->[beginner,middle,master]=?';
+$query = 'set-level ~';
+// level = null
+
+// Avec commentaire
+$signature = 'set-level ::level->[beginner,middle,master]=medium#"The skill level"';
+```
+
+### Accès aux énumérations
+
+```php
+$result = $parser->parse($signature, $query);
+
+// Valeur
+$level = $result->enums->get('level'); // 'master'
+
+// Valeurs autorisées
+$allowed = $result->enums->getAllowedValues('level'); // ['beginner', 'middle', 'master']
+
+// Vérifications
+if ($result->enums->isRequired('level')) {
+    echo "Level est requis";
+}
+
+if ($result->enums->isAllowed('level', 'master')) {
+    echo "'master' est autorisé";
+}
+```
+
+---
+
+## Tags personnalisés
+
+Les tags personnalisés permettent d'ajouter des données supplémentaires à une commande sans modifier la signature.
+
+### Syntaxe
+
+```php
+<key="value">
+<key='value'>
+```
+
+### Utilisation
+
+```php
+$signature = 'send {recipient} {--verbose}';
+$query = 'send John --verbose <greeting="Hello World"> <later="goodby">';
+
+$result = $parser->parse($signature, $query);
+
+$customData = $result->custom_data->toArray();
+echo $customData['greeting']; // 'Hello World'
+echo $customData['later'];    // 'goodby'
+```
+
+### Avec QueryBuilder
+
+```php
+$query = QueryBuilder::init('deploy {environment}')
+    ->setRequired('environment', 'staging')
+    ->setCustoms([
+        'version' => '1.2.3',
+        'user' => 'admin'
+    ])
+    ->build();
+
+// 'deploy staging <version="1.2.3"> <user="admin">'
 ```
 
 ---
@@ -247,66 +353,24 @@ $query = 'backup /var/www <user="admin"> --force';
 
 use AndyDefer\SignatureParser\SignatureParser;
 
-// Définition de la commande
-$signature = 'backup {source} {destination} {format=zip} {output=dist} {env=?} {excludes*} {purpose*} {--force} {--verbose}';
+$signature = 'backup {source} {destination} {format=zip} {output=dist} {env=?} ::level->[low,high]=medium {excludes*} {purpose*} {--force} {--verbose}';
+$query = 'backup /var/www /backup tar.gz dist staging high [cache, logs, tmp] [home, data, models] --force';
 
-// Commande exécutée
-$query = 'backup /var/www /backup tar.gz dist staging [cache, logs, tmp] [home, data, models] --force';
-
-// Parse
 $parser = new SignatureParser();
 $result = $parser->parse($signature, $query);
 
-// Accès aux données typées
 echo $result->source;                                      // 'backup'
-echo $result->required->first()->value;                   // '/var/www'
-echo $result->default->first()->value;                    // 'tar.gz'
-echo $result->variadic->first()->values->first();         // 'cache'
-echo $result->flags->first()->value;                      // true
+echo $result->requireds->first()->value;                   // '/var/www'
+echo $result->defaults->first()->value;                    // 'tar.gz'
+echo $result->variadics->first()->values->first();         // 'cache'
+echo $result->flags->first()->value;                       // true
+echo $result->enums->get('level');                         // 'high'
 ```
 
-### Parcours des collections
+### Validation
 
 ```php
-// Parcours des arguments requis
-foreach ($result->required as $arg) {
-    echo "{$arg->name}: {$arg->value}\n";
-}
-// source: /var/www
-// destination: /backup
-
-// Parcours des valeurs par défaut
-foreach ($result->default as $arg) {
-    echo "{$arg->name}: {$arg->value}\n";
-}
-// format: tar.gz
-// output: dist
-
-// Parcours des variadiques
-foreach ($result->variadic as $arg) {
-    echo "{$arg->name}: " . implode(', ', $arg->values->toArray()) . "\n";
-}
-// excludes: cache, logs, tmp
-// purpose: home, data, models
-
-// Parcours des flags
-foreach ($result->flags as $flag) {
-    echo "{$flag->name}: " . ($flag->value ? 'true' : 'false') . "\n";
-}
-// force: true
-// verbose: false
-
-// Accès aux tags personnalisés
-$customData = $result->custom_data->toArray();
-foreach ($customData as $key => $value) {
-    echo "{$key}: {$value}\n";
-}
-// user: admin
-```
-
-### Validation de requête
-
-```php
+// Validation de requête
 $result = $parser->validate(
     'backup {source} {destination}',
     'backup /var/www'
@@ -316,23 +380,13 @@ if (!$result->isValid) {
     foreach ($result->errors as $error) {
         echo "❌ $error\n";
     }
-    foreach ($result->suggestions as $suggestion) {
-        echo "💡 $suggestion\n";
-    }
 }
-```
 
-### Validation de signature
-
-```php
-$result = $parser->validateSignature('backup {source} {format=zip} {excludes*} {--force}');
+// Validation de signature
+$result = $parser->validateSignature('backup {source} {format=zip} {--force}');
 
 if ($result->isValid) {
     echo "✅ Signature valide\n";
-} else {
-    foreach ($result->errors as $error) {
-        echo "❌ $error\n";
-    }
 }
 ```
 
@@ -340,26 +394,15 @@ if ($result->isValid) {
 
 ## Manipulation des collections
 
-Le résultat du parseur (`ParsedSignatureRecord`) contient 4 collections typées plus les données personnalisées.
-
 ### ArgumentCollection
 
-Collection d'arguments (`ArgumentRecord`) avec leurs noms et valeurs.
+Collection d'arguments (`ArgumentRecord`).
 
 ```php
-use AndyDefer\SignatureParser\Collections\ArgumentCollection;
-use AndyDefer\SignatureParser\Records\ArgumentRecord;
-
-$collection = new ArgumentCollection();
-$collection->add(
-    new ArgumentRecord('source', '/var/www'),
-    new ArgumentRecord('destination', '/backup'),
-    new ArgumentRecord('format', 'tar.gz')
-);
+$collection = $result->requireds;
 
 // Récupérer une valeur par nom
 $source = $collection->get('source');        // '/var/www'
-$unknown = $collection->get('unknown');      // null
 
 // Vérifier si un argument existe
 if ($collection->has('destination')) {
@@ -367,55 +410,21 @@ if ($collection->has('destination')) {
 }
 
 // Récupérer tous les noms
-$names = $collection->getNames();            // ['source', 'destination', 'format']
-
-// Récupérer toutes les valeurs
-$values = $collection->getValues();          // ['/var/www', '/backup', 'tar.gz']
+$names = $collection->getNames();            // ['source', 'destination']
 
 // Convertir en tableau associatif
-$assoc = $collection->toAssociativeArray();  // ['source' => '/var/www', 'destination' => '/backup', 'format' => 'tar.gz']
+$assoc = $collection->toAssociativeArray();  // ['source' => '/var/www', 'destination' => '/backup']
 ```
-
-#### Cas d'usage : Récupération d'arguments dans une commande
-
-```php
-$source = $result->required->get('source');
-$destination = $result->required->get('destination');
-
-if (!$result->required->has('source')) {
-    throw new \Exception("Source argument is required");
-}
-
-// Transformer en tableau associatif pour une API
-$payload = $result->required->toAssociativeArray();
-```
-
----
 
 ### FlagCollection
 
-Collection de flags (`FlagRecord`) avec leurs noms et valeurs booléennes.
+Collection de flags (`FlagRecord`).
 
 ```php
-use AndyDefer\SignatureParser\Collections\FlagCollection;
-use AndyDefer\SignatureParser\Records\FlagRecord;
-
-$collection = new FlagCollection();
-$collection->add(
-    new FlagRecord('force', true),
-    new FlagRecord('verbose', false),
-    new FlagRecord('all', true)
-);
+$collection = $result->flags;
 
 // Récupérer la valeur d'un flag
 $force = $collection->get('force');          // true
-$verbose = $collection->get('verbose');      // false
-$unknown = $collection->get('unknown');      // false (par défaut)
-
-// Vérifier si un flag existe
-if ($collection->has('force')) {
-    echo "Flag force présent";
-}
 
 // Vérifier si un flag est actif
 if ($collection->isActive('force')) {
@@ -423,81 +432,62 @@ if ($collection->isActive('force')) {
 }
 
 // Récupérer tous les flags actifs
-$active = $collection->getActiveNames();     // ['force', 'all']
-
-// Récupérer tous les noms
-$names = $collection->getNames();            // ['force', 'verbose', 'all']
-
-// Convertir en tableau associatif
-$assoc = $collection->toAssociativeArray();  // ['force' => true, 'verbose' => false, 'all' => true]
+$active = $collection->getActiveNames();     // ['force']
 ```
 
-#### Cas d'usage : Validation des flags
+### EnumCollection
+
+Collection d'énumérations (`EnumRecord`).
 
 ```php
-// Vérification des flags requis
-if (!$result->flags->isActive('force')) {
-    echo "Le flag --force est requis pour cette opération";
+$collection = $result->enums;
+
+// Récupérer une valeur
+$level = $collection->get('level');          // 'high'
+
+// Valeurs autorisées
+$allowed = $collection->getAllowedValues('level'); // ['low', 'medium', 'high']
+
+// Vérifications
+if ($collection->isRequired('level')) {
+    echo "Level est requis";
 }
 
-// Liste des flags actifs
-$activeFlags = $result->flags->getActiveNames();
-echo "Flags actifs: " . implode(', ', $activeFlags);
-```
+if ($collection->isAllowed('level', 'master')) {
+    echo "'master' est autorisé";
+}
 
----
+// Tableau associatif [nom => valeur]
+$assoc = $collection->toAssociativeArray();  // ['level' => 'high']
+
+// Tableau complet avec toutes les données
+$full = $collection->toFullArray();
+// [
+//     [
+//         'name' => 'level',
+//         'value' => 'high',
+//         'allowed_values' => ['low', 'medium', 'high'],
+//         'default_value' => 'medium',
+//         'value_state' => 'DEFAULTED'
+//     ]
+// ]
+```
 
 ### VariadicArgumentCollection
 
-Collection d'arguments variadiques (`VariadicArgumentRecord`) avec leurs noms et listes de valeurs.
+Collection d'arguments variadiques (`VariadicArgumentRecord`).
 
 ```php
-use AndyDefer\SignatureParser\Collections\VariadicArgumentCollection;
-use AndyDefer\SignatureParser\Records\VariadicArgumentRecord;
-use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
+$collection = $result->variadics;
 
-$collection = new VariadicArgumentCollection();
-$collection->add(
-    new VariadicArgumentRecord('excludes', StringTypedCollection::from(['cache', 'logs', 'tmp'])),
-    new VariadicArgumentRecord('includes', StringTypedCollection::from(['src', 'tests']))
-);
-
-// Récupérer les valeurs d'un argument variadique
+// Récupérer les valeurs
 $excludes = $collection->get('excludes');    // ['cache', 'logs', 'tmp']
-$unknown = $collection->get('unknown');      // []
-
-// Vérifier si un argument variadique existe
-if ($collection->has('excludes')) {
-    echo "Excludes défini";
-}
-
-// Récupérer tous les noms
-$names = $collection->getNames();            // ['excludes', 'includes']
-
-// Récupérer toutes les valeurs (aplatit tout)
-$allValues = $collection->getAllValues();    // ['cache', 'logs', 'tmp', 'src', 'tests']
 
 // Compter le nombre total de valeurs
 $total = $collection->countAllValues();      // 5
 
 // Convertir en tableau associatif
-$assoc = $collection->toAssociativeArray();  // ['excludes' => ['cache', 'logs', 'tmp'], 'includes' => ['src', 'tests']]
-```
-
-#### Cas d'usage : Traitement des fichiers en lot
-
-```php
-// Traitement des fichiers
-$files = $result->variadic->get('files');
-foreach ($files as $file) {
-    echo "Processing: $file\n";
-}
-
-// Vérification s'il y a des fichiers à traiter
-if ($result->variadic->has('files')) {
-    $count = $result->variadic->countAllValues();
-    echo "Traitement de $count fichiers...";
-}
+$assoc = $collection->toAssociativeArray();  // ['excludes' => ['cache', 'logs', 'tmp']]
 ```
 
 ---
@@ -506,35 +496,27 @@ if ($result->variadic->has('files')) {
 
 ### SignatureStructureVO
 
-Analyse UNIQUEMENT la structure d'une signature (sans requête) et la valide.
+Analyse UNIQUEMENT la structure d'une signature (sans requête).
 
 ```php
-<?php
-
 use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 
-$vo = new SignatureStructureVO('backup {source} {destination} {format=zip} {excludes*} {--force}');
+$vo = new SignatureStructureVO('backup {source} {destination} {format=zip} ::level->[low,high]=medium {excludes*} {--force}');
 
 // Accès aux informations
 echo $vo->getSource();          // 'backup'
-
-// Vérification de la présence d'arguments
-if ($vo->hasRequired('source')) {
-    echo "L'argument source est requis\n";
-}
-
-// Récupération des listes
 $requireds = $vo->getRequireds();    // ['source', 'destination']
 $defaults = $vo->getDefaults();      // ['format' => 'zip']
+$enums = $vo->getEnums();            // ['level' => [...]]
 $variadics = $vo->getVariadics();    // ['excludes']
 $flags = $vo->getFlags();            // ['force']
 
-// Structure complète typée
-$structure = $vo->getValue();
-echo $structure->source;             // 'backup'
-echo $structure->default->format;    // 'zip'
+// Vérifications
+if ($vo->hasEnum('level')) {
+    $allowed = $vo->getEnumAllowedValues('level'); // ['low', 'medium', 'high']
+}
 
-// Validation de la signature
+// Validation
 if ($vo->isValid()) {
     echo "✅ Signature valide";
 } else {
@@ -542,79 +524,23 @@ if ($vo->isValid()) {
         echo "❌ $error\n";
     }
 }
+
+// Documentation
+$markdown = $vo->documentInMarkdown();
+$json = $vo->documentInJson();
+$array = $vo->documentInArray();
 ```
-
-#### Cas d'usage : Génération de documentation
-
-```php
-function generateCommandHelp(string $signature): string
-{
-    $vo = new SignatureStructureVO($signature);
-    
-    $help = "Usage: " . $vo->getSource() . "\n\n";
-    
-    // Arguments requis
-    if ($vo->hasRequireds()) {
-        $help .= "Arguments requis:\n";
-        foreach ($vo->getRequireds() as $arg) {
-            $help .= "  <$arg>\n";
-        }
-        $help .= "\n";
-    }
-    
-    // Arguments avec valeurs par défaut
-    if ($vo->hasDefaults()) {
-        $help .= "Arguments optionnels:\n";
-        foreach ($vo->getDefaults() as $name => $value) {
-            $help .= "  <$name> (défaut: $value)\n";
-        }
-        $help .= "\n";
-    }
-    
-    // Flags
-    if ($vo->hasFlags()) {
-        $help .= "Flags:\n";
-        foreach ($vo->getFlags() as $flag) {
-            $help .= "  --$flag\n";
-        }
-    }
-    
-    // Tags personnalisés
-    $help .= "\nTags personnalisés:\n";
-    $help .= "  <key=\"value\"> - Données supplémentaires\n";
-    
-    return $help;
-}
-
-// Génère l'aide pour une commande
-echo generateCommandHelp('deploy {env=production} {--force} {--verbose}');
-// Usage: deploy
-// 
-// Arguments optionnels:
-//   <env> (défaut: production)
-// 
-// Flags:
-//   --force
-//   --verbose
-// 
-// Tags personnalisés:
-//   <key="value"> - Données supplémentaires
-```
-
----
 
 ### SignatureVO
 
 Analyse complète avec signature ET requête.
 
 ```php
-<?php
-
 use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
 
 $vo = new SignatureVO(
-    'backup {source} {destination} {format=zip} {--force}',
-    'backup /var/www /backup tar.gz --force <user="admin">'
+    'backup {source} {destination} {format=zip} {--force} ::level->[low,high]=medium',
+    'backup /var/www /backup tar.gz --force high'
 );
 
 // Accès direct aux valeurs
@@ -622,28 +548,22 @@ echo $vo->getSource();                    // 'backup'
 echo $vo->getRequired('source');          // '/var/www'
 echo $vo->getDefault('format');           // 'tar.gz'
 echo $vo->getFlag('force');               // true
-echo $vo->getCustom('user');              // 'admin'
+echo $vo->getEnum('level');               // 'high'
 
-// Vérification de présence
+// Vérifications
 if ($vo->hasFlag('force')) {
-    echo "Force mode activé\n";
+    echo "Force mode activé";
 }
 
-if ($vo->hasCustom('user')) {
-    echo "User: " . $vo->getCustom('user') . "\n";
+if ($vo->hasEnum('level')) {
+    echo $vo->getEnum('level');           // 'high'
 }
 
 // Récupération complète
 $requireds = $vo->getRequireds();    // ['source' => '/var/www', 'destination' => '/backup']
 $defaults = $vo->getDefaults();      // ['format' => 'tar.gz']
 $flags = $vo->getFlags();            // ['force' => true]
-$customs = $vo->getCustoms();         // ['user' => 'admin']
-
-// Accès via objet typé
-$parsed = $vo->getParsed();
-echo $parsed->source;                // 'backup'
-echo $parsed->required['source'];    // '/var/www'
-echo $parsed->custom_tags['user'];   // 'admin'
+$enums = $vo->getEnums();            // ['level' => 'high']
 
 // Validation
 if (!$vo->isValid()) {
@@ -653,58 +573,81 @@ if (!$vo->isValid()) {
 }
 ```
 
-#### Cas d'usage : Validation de commande
+---
+
+## SignatureDocumentor - Génération de documentation
+
+Le `SignatureDocumentor` génère automatiquement une documentation complète pour une signature.
+
+### Formats supportés
+
+| Format | Méthode | Description |
+|--------|---------|-------------|
+| Markdown | `documentInMarkdown()` | Documentation structurée avec tables |
+| Texte | `documentInText()` | Documentation en texte brut |
+| JSON | `documentInJson()` | Export structuré |
+| Array | `documentInArray()` | Tableau PHP |
+
+### Utilisation
 
 ```php
-function validateCommand(string $signature, string $query): array
-{
-    $vo = new SignatureVO($signature, $query);
-    $errors = [];
+use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 
-    // Vérification des arguments requis
-    foreach ($vo->getRequireds() as $name => $value) {
-        if (empty($value) || $value === '~') {
-            $errors[] = "L'argument '$name' est requis";
-        }
-    }
+$vo = new SignatureStructureVO('backup {source}#"Source" {destination} {format=zip}#"Format" {--force}#"Force"');
 
-    // Vérification des flags obligatoires
-    if ($vo->hasFlag('force') && !$vo->getFlag('force')) {
-        $errors[] = "Le flag --force est obligatoire";
-    }
+// Markdown
+$markdown = $vo->documentInMarkdown();
+echo $markdown;
 
-    return $errors;
-}
+// JSON
+$json = $vo->documentInJson();
+file_put_contents('doc.json', $json);
 
-// Validation d'une commande
-$errors = validateCommand(
-    'deploy {env} {--force}',
-    'deploy staging'
-);
+// Array
+$data = $vo->documentInArray();
+print_r($data);
+```
 
-if (empty($errors)) {
-    echo "Commande valide\n";
-} else {
-    echo "Erreurs:\n";
-    foreach ($errors as $error) {
-        echo "  - $error\n";
-    }
-}
-// Erreurs:
-//   - Le flag --force est obligatoire
+### Exemple de sortie Markdown
+
+```markdown
+# Commande : backup
+
+## Description
+
+```bash
+backup <source> <destination> [format=zip] [--force]
+```
+
+## Arguments requis
+
+| Nom | Description |
+|-----|-------------|
+| `source` | Source |
+| `destination` | — |
+
+## Arguments par défaut
+
+| Nom | Défaut | Description |
+|-----|--------|-------------|
+| `format` | `zip` | Format |
+
+## Flags
+
+| Nom | Description |
+|-----|-------------|
+| `--force` | Force |
 ```
 
 ---
 
 ## QueryBuilder - Construction dynamique
 
-Le `QueryBuilder` permet de construire programmatiquement des requêtes CLI à partir d'une signature avec un chaînage fluide.
+Le `QueryBuilder` permet de construire programmatiquement des requêtes CLI.
 
-### Utilisation de base avec chaînage
+### Utilisation de base
 
 ```php
-<?php
-
 use AndyDefer\SignatureParser\QueryBuilder;
 
 $query = QueryBuilder::init('greet {name} {--formal}')
@@ -715,63 +658,32 @@ $query = QueryBuilder::init('greet {name} {--formal}')
 echo $query; // 'greet John --formal'
 ```
 
-### Arguments avec valeur par défaut
+### Avec énumérations
 
 ```php
-$query = QueryBuilder::init('backup {source} {format=zip} {--force}')
-    ->setRequired('source', '/var/www')
-    ->setDefault('format', 'tar.gz')
-    ->setFlag('--force', true)
-    ->build();
-
-echo $query; // 'backup /var/www tar.gz --force'
-```
-
-### Arguments variadiques avec tableaux
-
-```php
-$query = QueryBuilder::init('process {files*} {--verbose}')
-    ->setVariadic('files', ['file1.txt', 'file2.txt', 'file3.txt'])
+$query = QueryBuilder::init('set-level ::level->[beginner,middle,master]=middle {--verbose}')
+    ->setEnum('level', 'master')
     ->setFlag('--verbose', true)
     ->build();
 
-echo $query; // 'process [file1.txt, file2.txt, file3.txt] --verbose'
-
-// Avec une chaîne (comportement existant)
-$query = QueryBuilder::init('process {files*} {--verbose}')
-    ->setVariadic('files', 'file1.txt, file2.txt, file3.txt')
-    ->setFlag('--verbose', true)
-    ->build();
-// Même résultat
+echo $query; // 'set-level master --verbose'
 ```
 
-### Tags personnalisés avec chaînage
+### Avec tags personnalisés
 
 ```php
 $query = QueryBuilder::init('send {recipient} {--verbose}')
     ->setRequired('recipient', 'John')
     ->setFlag('--verbose', true)
     ->setCustom('greeting', 'Hello World')
-    ->setCustom('later', 'goodby')
-    ->build();
-
-echo $query; // 'send John --verbose <greeting="Hello World"> <later="goodby">'
-```
-
-### Multiple tags en une fois
-
-```php
-$query = QueryBuilder::init('deploy {environment} {--force}')
-    ->setRequired('environment', 'staging')
-    ->setFlag('--force', true)
     ->setCustoms([
-        'version' => '1.2.3',
-        'user' => 'admin',
-        'timestamp' => '2026-07-10'
+        'later' => 'goodby',
+        'user' => 'admin'
     ])
     ->build();
 
-echo $query; // 'deploy staging --force <version="1.2.3"> <user="admin"> <timestamp="2026-07-10">'
+echo $query;
+// 'send John --verbose <greeting="Hello World"> <later="goodby"> <user="admin">'
 ```
 
 ### Parsing d'une requête initiale
@@ -782,20 +694,14 @@ $builder = QueryBuilder::init(
     'send John --verbose <greeting="Hello">'
 );
 
-// Les valeurs sont déjà chargées
 echo $builder->getRequired('recipient'); // 'John'
 echo $builder->getCustom('greeting');    // 'Hello'
 
-// Modifier avec chaînage
-$query = $builder
-    ->setCustom('greeting', 'Hello World')
-    ->setCustom('later', 'goodby')
-    ->build();
-
-echo $query; // 'send John --verbose <greeting="Hello World"> <later="goodby">'
+$query = $builder->setCustom('greeting', 'Hello World')->build();
+// 'send John --verbose <greeting="Hello World">'
 ```
 
-### Validation et erreurs
+### Validation
 
 ```php
 $builder = QueryBuilder::init('greet {name} {--formal}');
@@ -805,120 +711,27 @@ if (!$builder->isValid()) {
         echo "❌ $error\n";
     }
 }
-```
 
-### Reset du builder
-
-```php
-$query = QueryBuilder::init('greet {name} {--formal}')
-    ->setRequired('name', 'John')
-    ->setFlag('--formal', true)
-    ->reset()  // Réinitialise tout
-    ->build();
-
-echo $query; // 'greet ~' (avec les valeurs par défaut)
-```
----
-
-## Tags personnalisés
-
-Les tags personnalisés permettent d'ajouter des données supplémentaires à une commande sans modifier la signature.
-
-### Syntaxe
-
-```php
-<key="value">
-```
-
-### Utilisation avec le parser
-
-```php
-$signature = 'send {recipient} {--verbose}';
-$query = 'send John --verbose <greeting="Hello World"> <later="goodby">';
-
-$result = $parser->parse($signature, $query);
-
-// Accès aux tags personnalisés
-$customData = $result->custom_data->toArray();
-echo $customData['greeting']; // 'Hello World'
-echo $customData['later'];    // 'goodby'
-```
-
-### Tags avec QueryBuilder
-
-```php
-$query = QueryBuilder::init('deploy {environment}')
-    ->setRequired('environment', 'staging')
-    ->setCustoms([
-        'version' => '1.2.3',
-        'user' => 'admin',
-        'timestamp' => '2026-07-10'
-    ])
-    ->build();
-
-// 'deploy staging <version="1.2.3"> <user="admin"> <timestamp="2026-07-10">'
-```
-
-### Accès dans SignatureVO
-
-```php
-$vo = new SignatureVO($signature, $query);
-
-echo $vo->getCustom('greeting');   // 'Hello World'
-echo $vo->hasCustom('later');      // true
-
-$allCustoms = $vo->getCustoms();
-// ['greeting' => 'Hello World', 'later' => 'goodby']
-```
-
-### Validation des tags personnalisés
-
-Le `CustomTagParser` valide automatiquement la syntaxe des tags :
-
-```php
-$result = $parser->validate(
-    'send {recipient}',
-    'send John <greeting="Hello"> <invalid_tag>'
-);
-
-if (!$result->isValid) {
-    foreach ($result->errors as $error) {
-        echo "❌ $error\n";
-    }
+try {
+    $query = $builder->build();
+} catch (InvalidArgumentException $e) {
+    echo "Erreur: " . $e->getMessage();
 }
-// ❌ Invalid custom tag syntax: <invalid_tag>
-```
-
----
-
-## Extraction manuelle des éléments
-
-```php
-$parser = new SignatureParser();
-
-// Extraction des éléments de la signature
-$elements = $parser->extractSignatureElements('backup {source} {destination} {--force}');
-// StringTypedCollection ['backup', 'source', 'destination', '--force']
-
-// Extraction des éléments de la requête
-$elements = $parser->extractQueryElements('backup /var/www /backup [cache, logs] --force');
-// StringTypedCollection ['backup', '/var/www', '/backup', '[cache, logs]', '--force']
 ```
 
 ---
 
 ## Les parseurs internes
 
-Le package utilise une **chaîne de responsabilité** (Chain of Responsibility) avec 6 parseurs :
-
 | Parser | Rôle | Syntaxe | Priorité |
 |--------|------|---------|----------|
 | `SourceParser` | Nom de la commande | `command` | 1 |
 | `RequiredParser` | Arguments requis | `{name}` | 2 |
 | `DefaultParser` | Par défaut et nullables | `{name=value}`, `{name=?}` | 3 |
-| `VariadicParser` | Arguments variadiques | `{name*}` | 4 |
-| `FlagParser` | Flags | `{--flag}` | 5 |
-| `CustomTagParser` | Tags personnalisés | `<key="value">` | 6 |
+| `EnumParser` | Énumérations | `::name->[values]=state` | 4 |
+| `VariadicParser` | Arguments variadiques | `{name*}` | 5 |
+| `FlagParser` | Flags | `{--flag}` | 6 |
+| `CustomTagParser` | Tags personnalisés | `<key="value">` | 7 |
 
 ---
 
@@ -927,8 +740,6 @@ Le package utilise une **chaîne de responsabilité** (Chain of Responsibility) 
 ### Ajouter un parseur personnalisé
 
 ```php
-<?php
-
 use AndyDefer\SignatureParser\Contracts\ParserInterface;
 use AndyDefer\SignatureParser\Records\ParsedResultRecord;
 use AndyDefer\SignatureParser\Records\ValidationResultRecord;
@@ -969,234 +780,18 @@ $result = $parser->parse($signature, $query);
 echo $result->data->get('custom'); // 'valeur_personnalisee'
 ```
 
-### Parseur de tags personnalisés intégré
-
-Le package inclut un `CustomTagParser` qui extrait automatiquement les tags `<key="value">`.
-
-```php
-// Les tags sont automatiquement extraits et placés dans custom_data
-$result = $parser->parse(
-    'send {recipient}',
-    'send John <greeting="Hello"> <later="goodby">'
-);
-
-$customData = $result->custom_data->toArray();
-// ['greeting' => 'Hello', 'later' => 'goodby']
-```
-
 ### Supprimer un parseur
 
 ```php
-// Supprime le parseur de tags personnalisés
+// Supprime le parser de tags personnalisés
 $parser->removeParser(CustomTagParser::class);
-
-// Les tags ne seront plus extraits
-$result = $parser->parse('send {recipient}', 'send John <greeting="Hello">');
-// $result->custom_data est vide
 ```
 
 ---
 
 ## Cas d'usage avancés
 
-### Cas 1 : Interface de ligne de commande avec QueryBuilder
-
-```php
-<?php
-
-use AndyDefer\SignatureParser\QueryBuilder;
-
-class CliApplication
-{
-    public function buildDeployCommand(string $env, string $version, array $files): string
-    {
-        return QueryBuilder::init('deploy {environment} {version=?} {files*} {--force}')
-            ->setRequired('environment', $env)
-            ->setDefault('version', $version)
-            ->setVariadic('files', $files)
-            ->setFlag('--force', true)
-            ->build();
-    }
-}
-
-$app = new CliApplication();
-$cmd = $app->buildDeployCommand('staging', '1.2.3', ['config.yaml', 'secrets.json']);
-// 'deploy staging 1.2.3 [config.yaml, secrets.json] --force'
-```
-
-### Cas 2 : Validation avancée avec les collections
-
-```php
-<?php
-
-use AndyDefer\SignatureParser\SignatureParser;
-
-function validateBackupCommand(string $query): array
-{
-    $parser = new SignatureParser();
-    $result = $parser->parse(
-        'backup {source} {destination} {--force} {--verbose}',
-        $query
-    );
-    
-    $errors = [];
-    
-    if (!$result->required->has('source')) {
-        $errors[] = "La source est requise";
-    }
-    
-    if (!$result->required->has('destination')) {
-        $errors[] = "La destination est requise";
-    }
-    
-    $activeFlags = $result->flags->getActiveNames();
-    if (in_array('verbose', $activeFlags) && !in_array('force', $activeFlags)) {
-        $errors[] = "Le flag --verbose nécessite --force";
-    }
-    
-    // Vérification des tags personnalisés
-    $customData = $result->custom_data->toArray();
-    if (isset($customData['user']) && $customData['user'] === '') {
-        $errors[] = "Le tag user ne peut pas être vide";
-    }
-    
-    return $errors;
-}
-```
-
-### Cas 3 : Génération de documentation avec tags personnalisés
-
-```php
-<?php
-
-use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
-
-function generateHelp(string $signature): string
-{
-    $vo = new SignatureStructureVO($signature);
-    $help = "Usage: " . $vo->getSource() . "\n\n";
-    
-    if ($vo->hasRequireds()) {
-        $help .= "Arguments requis:\n";
-        foreach ($vo->getRequireds() as $arg) {
-            $help .= "  <$arg>\n";
-        }
-        $help .= "\n";
-    }
-    
-    if ($vo->hasDefaults()) {
-        $help .= "Arguments optionnels:\n";
-        foreach ($vo->getDefaults() as $name => $value) {
-            $display = $value ?? 'null';
-            $help .= "  <$name> (défaut: $display)\n";
-        }
-        $help .= "\n";
-    }
-    
-    if ($vo->hasFlags()) {
-        $help .= "Flags:\n";
-        foreach ($vo->getFlags() as $flag) {
-            $help .= "  --$flag\n";
-        }
-        $help .= "\n";
-    }
-    
-    // Note sur les tags personnalisés
-    $help .= "Tags personnalisés:\n";
-    $help .= "  <key=\"value\"> - Données supplémentaires\n";
-    $help .= "  Exemple: <user=\"admin\"> <version=\"1.2.3\">\n";
-    
-    return $help;
-}
-```
-
-### Cas 4 : Construction de commandes complexes avec chaînage
-
-```php
-<?php
-
-use AndyDefer\SignatureParser\QueryBuilder;
-
-class DeploymentCommandBuilder
-{
-    public static function build(
-        string $environment,
-        string $version,
-        array $files,
-        bool $force = false,
-        bool $verbose = false,
-        array $tags = []
-    ): string {
-        return QueryBuilder::init('deploy {environment} {version=?} {files*} {--force} {--verbose}')
-            ->setRequired('environment', $environment)
-            ->setDefault('version', $version)
-            ->setVariadic('files', $files)
-            ->setFlag('--force', $force)
-            ->setFlag('--verbose', $verbose)
-            ->setCustoms($tags)
-            ->build();
-    }
-}
-
-$cmd = DeploymentCommandBuilder::build(
-    environment: 'production',
-    version: '2.0.0',
-    files: ['app.yaml', 'database.sql', 'secrets.json'],
-    force: true,
-    verbose: false,
-    tags: [
-        'user' => 'deployer',
-        'timestamp' => '2026-07-10',
-        'commit' => 'abc123'
-    ]
-);
-
-echo $cmd;
-// 'deploy production 2.0.0 [app.yaml, database.sql, secrets.json] --force <user="deployer"> <timestamp="2026-07-10"> <commit="abc123">'
-```
-
----
-
-## Exemples complets
-
-### Exemple 1 : Commande avec tags personnalisés
-
-```php
-<?php
-
-use AndyDefer\SignatureParser\SignatureParser;
-use AndyDefer\SignatureParser\QueryBuilder;
-
-$parser = new SignatureParser();
-
-// 1. Parse avec tags
-$result = $parser->parse(
-    'deploy {environment} {--force}',
-    'deploy staging --force <user="admin"> <version="1.2.3">'
-);
-
-echo "Environnement: " . $result->required->first()->value . "\n";
-echo "Force: " . ($result->flags->first()->value ? 'true' : 'false') . "\n";
-
-$customData = $result->custom_data->toArray();
-echo "User: " . $customData['user'] . "\n";
-echo "Version: " . $customData['version'] . "\n";
-
-// 2. Construire avec QueryBuilder
-$query = QueryBuilder::init('deploy {environment} {--force}')
-    ->setRequired('environment', 'production')
-    ->setFlag('--force', true)
-    ->setCustoms([
-        'user' => 'deployer',
-        'timestamp' => '2026-07-10'
-    ])
-    ->build();
-
-echo $query . "\n";
-// 'deploy production --force <user="deployer"> <timestamp="2026-07-10">'
-```
-
-### Exemple 2 : Application CLI complète
+### Cas 1 : Application CLI complète
 
 ```php
 <?php
@@ -1205,7 +800,7 @@ use AndyDefer\SignatureParser\SignatureParser;
 use AndyDefer\SignatureParser\QueryBuilder;
 use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
 
-class TaskRunner
+class CliApplication
 {
     private SignatureParser $parser;
     
@@ -1220,8 +815,9 @@ class TaskRunner
         
         return [
             'source' => $result->source,
-            'args' => $result->required->toAssociativeArray(),
+            'args' => $result->requireds->toAssociativeArray(),
             'flags' => $result->flags->toAssociativeArray(),
+            'enums' => $result->enums->toAssociativeArray(),
             'custom' => $result->custom_data->toArray(),
         ];
     }
@@ -1233,6 +829,12 @@ class TaskRunner
         if (isset($params['args'])) {
             foreach ($params['args'] as $name => $value) {
                 $builder->setRequired($name, $value);
+            }
+        }
+        
+        if (isset($params['enums'])) {
+            foreach ($params['enums'] as $name => $value) {
+                $builder->setEnum($name, $value);
             }
         }
         
@@ -1249,121 +851,103 @@ class TaskRunner
         return $builder->build();
     }
 }
-
-// Utilisation
-$runner = new TaskRunner();
-
-// Exécution
-$result = $runner->run(
-    'deploy {environment} {--force}',
-    'deploy staging --force <user="admin">'
-);
-
-// Construction
-$cmd = $runner->build('deploy {environment} {--force}', [
-    'args' => ['environment' => 'production'],
-    'flags' => ['force' => true],
-    'custom' => ['user' => 'deployer']
-]);
-echo $cmd; // 'deploy production --force <user="deployer">'
 ```
 
-### Exemple 3 : Pipeline de déploiement
+### Cas 2 : Documentation automatique
+
+```php
+use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
+
+function generateHelp(string $signature): string
+{
+    $vo = new SignatureStructureVO($signature);
+    return $vo->documentInMarkdown();
+}
+
+// Génération de documentation pour toutes les commandes
+$commands = [
+    'deploy' => 'deploy {environment} {version=?} ::level->[low,high]=medium {--force}',
+    'backup' => 'backup {source} {destination} {format=zip} {--force}',
+    'restore' => 'restore {source} {destination} {--force}',
+];
+
+foreach ($commands as $name => $signature) {
+    file_put_contents("docs/{$name}.md", generateHelp($signature));
+}
+```
+
+---
+
+## Exemples complets
+
+### Exemple 1 : Commande avec tous les types
 
 ```php
 <?php
 
+use AndyDefer\SignatureParser\SignatureParser;
 use AndyDefer\SignatureParser\QueryBuilder;
+
+$parser = new SignatureParser();
+
+$signature = 'deploy {environment} {version=?} ::level->[low,medium,high]=medium {excludes*} {--force} {--verbose}';
+$query = 'deploy staging 1.2.3 high [cache,logs,tmp] --force';
+
+$result = $parser->parse($signature, $query);
+
+echo "Commande: " . $result->source . "\n";
+echo "Environnement: " . $result->requireds->get('environment') . "\n";
+echo "Version: " . ($result->defaults->get('version') ?? 'null') . "\n";
+echo "Niveau: " . $result->enums->get('level') . "\n";
+echo "Exclus: " . implode(', ', $result->variadics->get('excludes')) . "\n";
+echo "Force: " . ($result->flags->get('force') ? 'true' : 'false') . "\n";
+echo "Verbose: " . ($result->flags->get('verbose') ? 'true' : 'false') . "\n";
+
+// Construction avec QueryBuilder
+$cmd = QueryBuilder::init($signature)
+    ->setRequired('environment', 'production')
+    ->setDefault('version', '2.0.0')
+    ->setEnum('level', 'low')
+    ->setVariadic('excludes', ['temp', 'cache'])
+    ->setFlag('--force', true)
+    ->setFlag('--verbose', false)
+    ->setCustom('user', 'deployer')
+    ->build();
+
+echo $cmd;
+// 'deploy production 2.0.0 low [temp, cache] --force <user="deployer">'
+```
+
+### Exemple 2 : Pipeline de déploiement
+
+```php
+<?php
+
+use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 
 class DeploymentPipeline
 {
-    public static function buildDeploySteps(string $env): array
+    public static function generateDocs(): string
     {
-        $validate = QueryBuilder::init('validate {environment}')
-            ->setRequired('environment', $env)
-            ->build();
+        $signatures = [
+            'validate' => 'validate {environment} {--strict}',
+            'backup' => 'backup {environment} {--force}',
+            'deploy' => 'deploy {environment} {version=?} ::level->[low,medium,high]=medium {--force}',
+            'verify' => 'verify {environment} {--health-check}'
+        ];
         
-        $backup = QueryBuilder::init('backup {environment}')
-            ->setRequired('environment', $env)
-            ->setCustom('timestamp', date('Y-m-d_H-i-s'))
-            ->build();
+        $docs = "# Commandes de déploiement\n\n";
         
-        $deploy = QueryBuilder::init('deploy {environment} {--force}')
-            ->setRequired('environment', $env)
-            ->setFlag('--force', true)
-            ->setCustom('user', get_current_user())
-            ->build();
+        foreach ($signatures as $name => $signature) {
+            $vo = new SignatureStructureVO($signature);
+            $docs .= $vo->documentInMarkdown() . "\n---\n\n";
+        }
         
-        $verify = QueryBuilder::init('verify {environment}')
-            ->setRequired('environment', $env)
-            ->setCustom('checks', 'health,status')
-            ->build();
-        
-        return [$validate, $backup, $deploy, $verify];
+        return $docs;
     }
 }
 
-$steps = DeploymentPipeline::buildDeploySteps('staging');
-foreach ($steps as $step) {
-    echo $step . "\n";
-}
-
-// validate staging
-// backup staging <timestamp="2026-07-10_12-34-56">
-// deploy staging --force <user="john">
-// verify staging <checks="health,status">
-```
-
-### Exemple 4 : Génération de rapport avec tags
-
-```php
-<?php
-
-use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
-
-function generateReport(string $signature, string $query): string
-{
-    $vo = new SignatureVO($signature, $query);
-    
-    $report = "=== Rapport de commande ===\n";
-    $report .= "Commande: " . $vo->getSource() . "\n";
-    $report .= "Arguments:\n";
-    
-    foreach ($vo->getRequireds() as $name => $value) {
-        $report .= "  - $name: $value\n";
-    }
-    
-    if ($vo->hasDefaults()) {
-        $report .= "Valeurs par défaut:\n";
-        foreach ($vo->getDefaults() as $name => $value) {
-            $display = $value ?? 'null';
-            $report .= "  - $name: $display\n";
-        }
-    }
-    
-    if ($vo->hasFlags()) {
-        $report .= "Flags:\n";
-        foreach ($vo->getFlags() as $name => $active) {
-            $report .= "  - --$name: " . ($active ? 'actif' : 'inactif') . "\n";
-        }
-    }
-    
-    if ($vo->hasCustoms()) {
-        $report .= "Tags personnalisés:\n";
-        foreach ($vo->getCustoms() as $key => $value) {
-            $report .= "  - $key: $value\n";
-        }
-    }
-    
-    return $report;
-}
-
-$report = generateReport(
-    'deploy {environment} {--force}',
-    'deploy staging --force <user="admin"> <version="1.2.3">'
-);
-
-echo $report;
+echo DeploymentPipeline::generateDocs();
 ```
 
 ---

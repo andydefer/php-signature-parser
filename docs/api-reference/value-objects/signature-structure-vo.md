@@ -2,9 +2,9 @@
 
 ## Description
 
-Value Object qui analyse et valide la structure d'une signature de commande CLI. Extrait les composants : nom de la commande, arguments requis, arguments par défaut, arguments nullables, arguments variadiques et flags.
+Le `SignatureStructureVO` est un Value Object qui analyse une signature de commande et extrait sa structure complète : nom de la commande, arguments requis, arguments par défaut, arguments nullables, énumérations, variadics et flags.
 
-## Hiérarchie / Implémentations
+## Hiérarchie
 
 ```
 AbstractValueObject
@@ -13,42 +13,21 @@ AbstractValueObject
 
 ## Rôle principal
 
-`SignatureStructureVO` est le cœur de l'analyse syntaxique des signatures CLI. Il permet de :
+Analyse une chaîne de signature pour en extraire tous les composants de manière structurée et typée. La validation est effectuée à la construction pour garantir la validité de la signature. Fournit également des méthodes de documentation pour générer une documentation lisible de la signature.
 
-- Valider la syntaxe d'une signature
-- Extraire le nom de la commande (source)
-- Identifier les arguments requis `{name}`
-- Identifier les arguments avec valeur par défaut `{name=value}`
-- Identifier les arguments nullables `{name=?}`
-- Identifier les arguments variadiques `{name*}`
-- Identifier les flags `{--flag}`
-- Fournir des erreurs de validation et des suggestions
-
-## Installation
-
-```bash
-composer require andydefer/php-signature-parser
-```
-
-### Dépendances
-
-- `AbstractValueObject` - Classe de base des Value Objects
-- `StrictDataObject` - Structure de données immuable
-- `SignatureParser` - Parser de signatures
-- `ValidationResultRecord` - Enregistrement des résultats de validation
-- PHP 8.1+
+---
 
 ## API / Méthodes publiques
 
 ### `__construct(string $signature)`
 
+Analyse et valide une signature de commande.
+
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$signature` | `string` | Signature CLI (ex: `'greet {name} {--formal}'`) |
+| `$signature` | `string` | Signature de la commande (ex: `'backup {source} {--force}'`) |
 
-**Retourne :** `void`
-
-**Exceptions :** `InvalidArgumentException` - Si la signature est vide ou invalide
+**Exceptions :** `InvalidArgumentException` - Si la signature est vide
 
 **Exemple :**
 ```php
@@ -65,8 +44,7 @@ Retourne le nom de la commande (source).
 
 **Exemple :**
 ```php
-$structure = new SignatureStructureVO('backup {source}');
-echo $structure->getSource(); // 'backup'
+$source = $structure->getSource(); // 'backup'
 ```
 
 ---
@@ -75,54 +53,52 @@ echo $structure->getSource(); // 'backup'
 
 Retourne la représentation structurée de la signature.
 
-**Retourne :** `StrictDataObject` - Structure contenant `source`, `required`, `default`, `variadic`, `flags`
+**Retourne :** `StrictDataObject` - Objet contenant toutes les données
 
 **Exemple :**
 ```php
-$structure = $vo->getStructure();
-echo $structure->source;          // 'backup'
-print_r($structure->required);    // ['source', 'destination']
-print_r($structure->default);     // ['format' => 'zip']
+$data = $structure->getStructure();
+echo $data->source;      // 'backup'
+print_r($data->requireds); // ['source', 'destination']
 ```
 
 ---
 
 ### `getRequireds(): array`
 
-Retourne la liste des noms d'arguments requis.
+Retourne la liste des noms des arguments requis.
 
-**Retourne :** `array<string>` - Liste des noms d'arguments requis
+**Retourne :** `array<string>` - Noms des arguments requis
 
 **Exemple :**
 ```php
-$requireds = $vo->getRequireds(); // ['source', 'destination']
+$requireds = $structure->getRequireds(); // ['source', 'destination']
 ```
 
 ---
 
 ### `getDefaults(): array`
 
-Retourne les arguments par défaut avec leurs valeurs.
+Retourne les arguments par défaut avec leurs valeurs. Les arguments nullables (`{name=?}`) sont représentés avec une valeur `null`.
 
-**Retourne :** `array<string, string|null>` - Tableau associatif [nom => valeur]
+**Retourne :** `array<string, string|null>` - Tableau [nom => valeur]
 
 **Exemple :**
 ```php
-$defaults = $vo->getDefaults();
-// ['format' => 'zip', 'env' => null]
+$defaults = $structure->getDefaults(); // ['format' => 'zip', 'output' => null]
 ```
 
 ---
 
 ### `getVariadics(): array`
 
-Retourne la liste des noms d'arguments variadiques.
+Retourne la liste des noms des arguments variadiques.
 
-**Retourne :** `array<string>` - Liste des noms d'arguments variadiques
+**Retourne :** `array<string>` - Noms des arguments variadiques
 
 **Exemple :**
 ```php
-$variadics = $vo->getVariadics(); // ['files', 'excludes']
+$variadics = $structure->getVariadics(); // ['files']
 ```
 
 ---
@@ -131,12 +107,118 @@ $variadics = $vo->getVariadics(); // ['files', 'excludes']
 
 Retourne la liste des noms des flags.
 
-**Retourne :** `array<string>` - Liste des noms des flags
+**Retourne :** `array<string>` - Noms des flags (sans préfixe `--`)
 
 **Exemple :**
 ```php
-$flags = $vo->getFlags(); // ['force', 'verbose']
+$flags = $structure->getFlags(); // ['force', 'verbose']
 ```
+
+---
+
+### `getEnums(): array`
+
+Retourne les définitions des énumérations.
+
+**Retourne :** `array<string, array{allowed_values: array<string>, default_value: string|null, is_required: bool, is_optional: bool}>`
+
+**Exemple :**
+```php
+$enums = $structure->getEnums();
+// [
+//     'level' => [
+//         'allowed_values' => ['low', 'medium', 'high'],
+//         'default_value' => 'medium',
+//         'is_required' => false,
+//         'is_optional' => false
+//     ]
+// ]
+```
+
+---
+
+### `getEnumAllowedValues(string $name): ?array`
+
+Récupère les valeurs autorisées pour une énumération spécifique.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'énumération |
+
+**Retourne :** `array<string>|null` - Valeurs autorisées ou `null` si l'énumération n'existe pas
+
+**Exemple :**
+```php
+$allowed = $structure->getEnumAllowedValues('level'); // ['low', 'medium', 'high']
+```
+
+---
+
+### `getEnumDefaultValue(string $name): ?string`
+
+Récupère la valeur par défaut d'une énumération spécifique.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'énumération |
+
+**Retourne :** `string|null` - Valeur par défaut ou `null`
+
+**Exemple :**
+```php
+$default = $structure->getEnumDefaultValue('level'); // 'medium'
+```
+
+---
+
+### `isEnumRequired(string $name): bool`
+
+Vérifie si une énumération est requise.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'énumération |
+
+**Retourne :** `bool` - `true` si requise, `false` sinon
+
+**Exemple :**
+```php
+if ($structure->isEnumRequired('level')) {
+    echo "Le niveau est requis";
+}
+```
+
+---
+
+### `isEnumOptional(string $name): bool`
+
+Vérifie si une énumération est optionnelle (nullable).
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'énumération |
+
+**Retourne :** `bool` - `true` si optionnelle, `false` sinon
+
+---
+
+### `hasEnum(string $name): bool`
+
+Vérifie si une énumération existe.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$name` | `string` | Nom de l'énumération |
+
+**Retourne :** `bool` - `true` si elle existe, `false` sinon
+
+---
+
+### `hasEnums(): bool`
+
+Vérifie si la signature contient au moins une énumération.
+
+**Retourne :** `bool` - `true` si des énumérations existent, `false` sinon
 
 ---
 
@@ -148,19 +230,19 @@ Vérifie si un argument requis existe.
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `bool` - `true` si l'argument requis existe
+**Retourne :** `bool` - `true` s'il existe, `false` sinon
 
 ---
 
 ### `hasDefault(string $name): bool`
 
-Vérifie si un argument par défaut (incluant nullable) existe.
+Vérifie si un argument par défaut existe (incluant les nullables).
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `bool` - `true` si l'argument par défaut existe
+**Retourne :** `bool` - `true` s'il existe, `false` sinon
 
 ---
 
@@ -172,7 +254,7 @@ Vérifie si un argument variadique existe.
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `bool` - `true` si l'argument variadique existe
+**Retourne :** `bool` - `true` s'il existe, `false` sinon
 
 ---
 
@@ -182,9 +264,9 @@ Vérifie si un flag existe.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$name` | `string` | Nom du flag |
+| `$name` | `string` | Nom du flag (sans préfixe `--`) |
 
-**Retourne :** `bool` - `true` si le flag existe
+**Retourne :** `bool` - `true` s'il existe, `false` sinon
 
 ---
 
@@ -196,7 +278,7 @@ Vérifie si un argument existe (requis, par défaut ou variadique).
 |-----------|------|-------------|
 | `$name` | `string` | Nom de l'argument |
 
-**Retourne :** `bool` - `true` si l'argument existe
+**Retourne :** `bool` - `true` s'il existe, `false` sinon
 
 ---
 
@@ -204,61 +286,81 @@ Vérifie si un argument existe (requis, par défaut ou variadique).
 
 Retourne la signature brute.
 
-**Retourne :** `string` - La signature d'origine
+**Retourne :** `string` - Signature originale
+
+**Exemple :**
+```php
+$raw = $structure->getRaw(); // 'backup {source} {--force}'
+```
 
 ---
 
 ### `hasRequireds(): bool`
 
-Vérifie si la signature a des arguments requis.
+Vérifie si la signature contient au moins un argument requis.
 
-**Retourne :** `bool` - `true` si des arguments requis existent
+**Retourne :** `bool`
 
 ---
 
 ### `hasDefaults(): bool`
 
-Vérifie si la signature a des arguments par défaut (incluant nullables).
+Vérifie si la signature contient au moins un argument par défaut (incluant les nullables).
 
-**Retourne :** `bool` - `true` si des arguments par défaut existent
+**Retourne :** `bool`
 
 ---
 
 ### `hasVariadics(): bool`
 
-Vérifie si la signature a des arguments variadiques.
+Vérifie si la signature contient au moins un argument variadique.
 
-**Retourne :** `bool` - `true` si des arguments variadiques existent
+**Retourne :** `bool`
 
 ---
 
 ### `hasFlags(): bool`
 
-Vérifie si la signature a des flags.
+Vérifie si la signature contient au moins un flag.
 
-**Retourne :** `bool` - `true` si des flags existent
+**Retourne :** `bool`
 
 ---
 
 ### `isValid(): bool`
 
-Retourne si la structure de la signature est valide.
+Vérifie si la signature est valide.
 
-**Retourne :** `bool` - `true` si la signature est valide
+**Retourne :** `bool` - `true` si valide, `false` sinon
+
+**Exemple :**
+```php
+if ($structure->isValid()) {
+    echo "Signature valide";
+}
+```
 
 ---
 
 ### `getValidationErrors(): array`
 
-Retourne les erreurs de validation si la signature est invalide.
+Retourne les erreurs de validation.
 
 **Retourne :** `array<string>` - Liste des messages d'erreur
+
+**Exemple :**
+```php
+$errors = $structure->getValidationErrors();
+foreach ($errors as $error) {
+    echo "Erreur: $error\n";
+}
+```
 
 ---
 
 ### `getValidationSuggestions(): array`
 
-Retourne des suggestions pour corriger les erreurs.
+Retourne les suggestions pour corriger les erreurs.
 
 **Retourne :** `array<string>` - Liste des suggestions
 
@@ -272,23 +374,100 @@ Retourne le résultat complet de la validation.
 
 ---
 
+### `document(string $format = 'markdown'): string|array`
+
+Génère la documentation de la signature dans le format spécifié.
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `$format` | `string` | Format de sortie ('markdown', 'text', 'json', 'array') |
+
+**Retourne :** `string|array` - Documentation générée
+
+**Exceptions :** `InvalidArgumentException` - Si le format n'est pas supporté
+
+**Exemple :**
+```php
+$markdown = $structure->document('markdown');
+$json = $structure->document('json');
+$array = $structure->document('array');
+```
+
+---
+
+### `documentInMarkdown(): string`
+
+Génère la documentation au format Markdown.
+
+**Retourne :** `string` - Documentation Markdown
+
+**Exemple :**
+```php
+$markdown = $structure->documentInMarkdown();
+echo $markdown;
+```
+
+---
+
+### `documentInText(): string`
+
+Génère la documentation au format texte.
+
+**Retourne :** `string` - Documentation texte
+
+**Exemple :**
+```php
+$text = $structure->documentInText();
+echo $text;
+```
+
+---
+
+### `documentInJson(): string`
+
+Génère la documentation au format JSON.
+
+**Retourne :** `string` - Documentation JSON
+
+**Exemple :**
+```php
+$json = $structure->documentInJson();
+echo $json;
+```
+
+---
+
+### `documentInArray(): array`
+
+Génère la documentation sous forme de tableau.
+
+**Retourne :** `array<string, mixed>` - Documentation en tableau
+
+**Exemple :**
+```php
+$array = $structure->documentInArray();
+print_r($array);
+```
+
+---
+
 ### `getValue(): StrictDataObject`
 
-Retourne la structure sous forme de `StrictDataObject`.
+Méthode de `AbstractValueObject`. Retourne la structure complète.
 
-**Retourne :** `StrictDataObject` - Structure complète
+**Retourne :** `StrictDataObject`
 
 ---
 
 ### `equals(AbstractValueObject $other): bool`
 
-Vérifie l'égalité avec un autre Value Object.
+Compare deux objets `SignatureStructureVO`.
 
 | Paramètre | Type | Description |
 |-----------|------|-------------|
-| `$other` | `AbstractValueObject` | Autre Value Object à comparer |
+| `$other` | `AbstractValueObject` | Autre objet à comparer |
 
-**Retourne :** `bool` - `true` si les objets sont égaux
+**Retourne :** `bool` - `true` s'ils sont égaux, `false` sinon
 
 ---
 
@@ -297,105 +476,41 @@ Vérifie l'égalité avec un autre Value Object.
 ### Cas 1 : Analyse d'une signature simple
 
 ```php
-<?php
+$structure = new SignatureStructureVO('backup {source} {destination} {--force}');
 
-use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
-
-$structure = new SignatureStructureVO('greet {name} {--formal}');
-
-echo "Commande: " . $structure->getSource() . "\n";
-echo "Arguments requis: " . implode(', ', $structure->getRequireds()) . "\n";
-echo "Flags: " . implode(', ', $structure->getFlags()) . "\n";
-
-// Résultat:
-// Commande: greet
-// Arguments requis: name
-// Flags: formal
+echo $structure->getSource();           // 'backup'
+print_r($structure->getRequireds());    // ['source', 'destination']
+print_r($structure->getFlags());        // ['force']
 ```
 
-### Cas 2 : Validation d'une signature complexe
+### Cas 2 : Vérification d'arguments
 
 ```php
-<?php
+$structure = new SignatureStructureVO('deploy {environment} {port=8080} {--verbose}');
 
-$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {--force} {--verbose}';
-$structure = new SignatureStructureVO($signature);
+if ($structure->hasRequired('environment')) {
+    echo "L'argument environment est requis";
+}
 
-if ($structure->isValid()) {
-    echo "✅ Signature valide\n";
-    echo "Arguments requis: " . implode(', ', $structure->getRequireds()) . "\n";
-    echo "Valeurs par défaut:\n";
-    foreach ($structure->getDefaults() as $name => $value) {
-        echo "  - {$name}: " . ($value ?? 'null') . "\n";
-    }
-    echo "Variadiques: " . implode(', ', $structure->getVariadics()) . "\n";
-    echo "Flags: " . implode(', ', $structure->getFlags()) . "\n";
-} else {
-    echo "❌ Signature invalide\n";
-    foreach ($structure->getValidationErrors() as $error) {
-        echo "  - {$error}\n";
-    }
+if ($structure->hasDefault('port')) {
+    $default = $structure->getDefaults()['port'];
+    echo "Port par défaut: $default";
 }
 ```
 
-### Cas 3 : Vérification de l'existence d'arguments
+### Cas 3 : Génération de documentation
 
 ```php
-<?php
+$structure = new SignatureStructureVO('backup {source}#"Source directory" {destination} {format=zip}#"Archive format" {--force}#"Force overwrite"');
 
-$structure = new SignatureStructureVO('deploy {environment} {--force}');
+// Documentation Markdown
+echo $structure->documentInMarkdown();
 
-if ($structure->hasArgument('environment')) {
-    echo "L'argument 'environment' existe\n";
-}
+// Documentation JSON
+echo $structure->documentInJson();
 
-if ($structure->hasFlag('force')) {
-    echo "Le flag '--force' existe\n";
-}
-
-if (!$structure->hasArgument('version')) {
-    echo "L'argument 'version' n'existe pas\n";
-}
-```
-
-### Cas 4 : Génération de documentation
-
-```php
-<?php
-
-function generateHelp(string $signature): string
-{
-    $structure = new SignatureStructureVO($signature);
-    $help = "Usage: " . $structure->getSource() . "\n\n";
-
-    if ($structure->hasRequireds()) {
-        $help .= "Arguments requis:\n";
-        foreach ($structure->getRequireds() as $arg) {
-            $help .= "  <{$arg}>\n";
-        }
-        $help .= "\n";
-    }
-
-    if ($structure->hasDefaults()) {
-        $help .= "Arguments optionnels:\n";
-        foreach ($structure->getDefaults() as $name => $value) {
-            $display = $value ?? 'null';
-            $help .= "  <{$name}> (défaut: {$display})\n";
-        }
-        $help .= "\n";
-    }
-
-    if ($structure->hasFlags()) {
-        $help .= "Flags:\n";
-        foreach ($structure->getFlags() as $flag) {
-            $help .= "  --{$flag}\n";
-        }
-    }
-
-    return $help;
-}
-
-echo generateHelp('backup {source} {destination} {format=zip} {--force}');
+// Documentation array
+print_r($structure->documentInArray());
 ```
 
 ---
@@ -403,102 +518,50 @@ echo generateHelp('backup {source} {destination} {format=zip} {--force}');
 ## Flux d'exécution
 
 ```
-new SignatureStructureVO($signature)
-    ↓
-Valider que la signature n'est pas vide
-    ↓
-SignatureParser::validateSignature($signature)
-    ↓
-SignatureParser::extractSignatureElements($signature)
-    ↓
-Pour chaque élément
-    ├── --nom → flag
-    ├── nom* → variadic
-    ├── nom=valeur → default (valeur)
-    ├── nom=? → default (null)
-    └── nom → required
-    ↓
-Construction de la structure
-    ↓
-Retourner SignatureStructureVO
+Signature brute
+        ↓
+SignatureParser::validateSignature()
+        ↓
+SignatureParser::extractSignatureElements()
+        ↓
+parseElements()
+        ↓
+├── Requireds
+├── Defaults
+├── Enums
+├── Variadics
+└── Flags
+        ↓
+StrictDataObject (structure)
+        ↓
+ValidationResultRecord (validation)
 ```
-
----
 
 ## Gestion des erreurs
 
-| Situation | Exception | Message |
-|-----------|-----------|---------|
+| Situation | Exception/Erreur | Message |
+|-----------|------------------|---------|
 | Signature vide | `InvalidArgumentException` | `Signature cannot be empty` |
-| Token invalide | Validation via `isValid()` | `Invalid token syntax: '{token}'` |
-| Ordre invalide | Validation via `isValid()` | `Required argument '{name}' must appear before default...` |
-| Doublon d'argument | Validation via `isValid()` | `Duplicate argument name: '{name}'` |
-| Nom de source invalide | Validation via `isValid()` | `Invalid source name: '{name}'` |
-
----
-
-## Intégration
-
-### Avec SignatureParser
-
-```php
-$parser = new SignatureParser();
-$elements = $parser->extractSignatureElements('greet {name} {--formal}');
-$structure = new SignatureStructureVO('greet {name} {--formal}');
-```
-
-### Avec QueryBuilder
-
-```php
-$builder = QueryBuilder::init('greet {name} {--formal}');
-$structure = $builder->getStructure(); // SignatureStructureVO
-```
-
-### Avec ValidationResultRecord
-
-```php
-$structure = new SignatureStructureVO('greet {name} {--formal}');
-$result = $structure->getValidationResult();
-
-if (!$result->isValid) {
-    foreach ($result->errors as $error) {
-        echo $error . "\n";
-    }
-}
-```
-
----
+| Ordre invalide | Erreur de validation | `Required argument '{$name}' must appear before default, enum, variadic or flags` |
+| Syntaxe invalide | Erreur de validation | `Invalid token syntax: '{$token}'` |
+| Nom dupliqué | Erreur de validation | `Duplicate argument name: '{$name}'` |
+| Source invalide | Erreur de validation | `Invalid source name: '{$name}'` |
+| Enum sans valeurs | Erreur de validation | `Enum '{$name}' has no allowed values` |
+| Format de documentation invalide | `InvalidArgumentException` | `Unsupported format: {$format}` |
 
 ## Performance
 
-| Opération | Complexité | Détails |
-|-----------|------------|---------|
-| `__construct()` | O(n) | n = nombre d'éléments dans la signature |
-| `getSource()` | O(1) | Accès direct |
-| `getRequireds()` | O(1) | Accès direct |
-| `getDefaults()` | O(1) | Accès direct |
-| `getVariadics()` | O(1) | Accès direct |
-| `getFlags()` | O(1) | Accès direct |
-| `hasRequired()` | O(n) | Recherche dans le tableau |
-| `isValid()` | O(1) | Accès à la propriété |
-
-**Optimisations :**
+- O(n) pour l'extraction des éléments, où n est le nombre de tokens
 - Validation effectuée une seule fois à la construction
-- Résultats mis en cache dans les propriétés privées
-- Pas de recalcul des composants
-
----
+- Structure immuable après construction
+- Les méthodes de documentation délèguent à `SignatureDocumentor`
 
 ## Compatibilité
 
-| Version | Support | Notes |
-|---------|---------|-------|
-| PHP 8.4 | ✅ Complet | Support total |
-| PHP 8.3 | ✅ Complet | Support total |
-| PHP 8.2 | ✅ Complet | Support total |
-| PHP 8.1 | ✅ Complet | Support total |
-
----
+| Version PHP | Support |
+|-------------|---------|
+| PHP 8.1+ | ✅ Complet |
+| PHP 8.0 | ✅ Complet |
 
 ## Exemple complet
 
@@ -509,91 +572,47 @@ declare(strict_types=1);
 
 use AndyDefer\SignatureParser\ValueObjects\SignatureStructureVO;
 
-// 1. Création et analyse
-$signature = 'backup {source} {destination} {format=zip} {env=?} {excludes*} {--force} {--verbose}';
-$structure = new SignatureStructureVO($signature);
+// Création
+$structure = new SignatureStructureVO(
+    'backup {source} {destination} {format=zip} {output=?} ::level->[low,high]=medium {excludes*} {--force} {--verbose}'
+);
 
-echo "=== Analyse de la signature ===\n";
-echo "Signature: {$signature}\n\n";
-
-// 2. Validation
-if ($structure->isValid()) {
-    echo "✅ Signature valide\n\n";
-} else {
-    echo "❌ Signature invalide:\n";
-    foreach ($structure->getValidationErrors() as $error) {
-        echo "  - {$error}\n";
-    }
-    echo "\nSuggestions:\n";
-    foreach ($structure->getValidationSuggestions() as $suggestion) {
-        echo "  - {$suggestion}\n";
-    }
-    exit(1);
-}
-
-// 3. Affichage des composants
-echo "Commande: " . $structure->getSource() . "\n\n";
-
-echo "Arguments requis:\n";
-foreach ($structure->getRequireds() as $arg) {
-    echo "  - {$arg}\n";
-}
-echo "\n";
-
+// Accès aux données
+echo "Commande: " . $structure->getSource() . "\n";
+echo "Arguments requis: " . implode(', ', $structure->getRequireds()) . "\n";
 echo "Arguments par défaut:\n";
 foreach ($structure->getDefaults() as $name => $value) {
-    $display = $value ?? 'null';
-    echo "  - {$name}: {$display}\n";
+    echo "  $name: " . ($value ?? 'null') . "\n";
 }
-echo "\n";
+echo "Variadics: " . implode(', ', $structure->getVariadics()) . "\n";
+echo "Flags: " . implode(', ', $structure->getFlags()) . "\n";
 
-echo "Arguments variadiques:\n";
-foreach ($structure->getVariadics() as $arg) {
-    echo "  - {$arg}\n";
+// Enums
+foreach ($structure->getEnums() as $name => $data) {
+    echo "Enum '$name':\n";
+    echo "  Valeurs autorisées: " . implode(', ', $data['allowed_values']) . "\n";
+    echo "  Défaut: " . ($data['default_value'] ?? 'aucun') . "\n";
+    echo "  Requis: " . ($data['is_required'] ? 'Oui' : 'Non') . "\n";
 }
-echo "\n";
 
-echo "Flags:\n";
-foreach ($structure->getFlags() as $flag) {
-    echo "  --{$flag}\n";
+// Validation
+if ($structure->isValid()) {
+    echo "\n✅ Signature valide\n";
+} else {
+    echo "\n❌ Signature invalide:\n";
+    foreach ($structure->getValidationErrors() as $error) {
+        echo "  - $error\n";
+    }
 }
-echo "\n";
 
-// 4. Vérifications
-echo "=== Vérifications ===\n";
-echo "Has requireds: " . ($structure->hasRequireds() ? 'Yes' : 'No') . "\n";
-echo "Has defaults: " . ($structure->hasDefaults() ? 'Yes' : 'No') . "\n";
-echo "Has variadics: " . ($structure->hasVariadics() ? 'Yes' : 'No') . "\n";
-echo "Has flags: " . ($structure->hasFlags() ? 'Yes' : 'No') . "\n";
-echo "\n";
-
-// 5. Vérification d'arguments spécifiques
-echo "=== Vérifications spécifiques ===\n";
-$checks = ['source', 'destination', 'format', 'env', 'excludes', 'force', 'unknown'];
-
-foreach ($checks as $name) {
-    $exists = $structure->hasArgument($name);
-    echo "Argument '{$name}': " . ($exists ? '✅' : '❌') . "\n";
-}
-echo "\n";
-
-// 6. Structure brute
-echo "=== Structure brute ===\n";
-$value = $structure->getValue();
-print_r($value->toArray());
-echo "\n";
-
-// 7. Égalité
-$structure2 = new SignatureStructureVO($signature);
-echo "Égalité: " . ($structure->equals($structure2) ? '✅' : '❌') . "\n";
-
-// 8. Signature brute
-echo "Signature brute: " . $structure->getRaw() . "\n";
+// Documentation
+echo "\n📄 Documentation Markdown:\n";
+echo $structure->documentInMarkdown();
 ```
 
 ## Voir aussi
 
-- `SignatureParser` - Parser principal des signatures
-- `QueryBuilder` - Construction dynamique de requêtes
+- `SignatureParser` - Parser principal
+- `SignatureDocumentor` - Générateur de documentation
 - `ValidationResultRecord` - Résultat de validation
-- `StrictDataObject` - Structure de données immuable
+- `SignatureVO` - Value Object pour signature complète avec requête
