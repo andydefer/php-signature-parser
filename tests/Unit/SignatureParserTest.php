@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace AndyDefer\SignatureParser\Tests\Unit;
 
 use AndyDefer\DomainStructures\Collections\Utility\StringTypedCollection;
+use AndyDefer\SignatureParser\Parsers\EnumParser;
 use AndyDefer\SignatureParser\SignatureParser;
 use AndyDefer\SignatureParser\Tests\Fixtures\CustomParser;
 use InvalidArgumentException;
@@ -568,7 +569,6 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->validateSignature($signature);
 
         $this->assertFalse($result->isValid);
-        // Il peut y avoir plusieurs erreurs (ordre + token invalide)
         $this->assertGreaterThanOrEqual(1, $result->errors->count());
         $this->assertStringContainsString('invalid!', $result->errors->first());
     }
@@ -580,26 +580,22 @@ final class SignatureParserTest extends TestCase
         $result = $this->parser->validateSignature($signature);
 
         $this->assertFalse($result->isValid);
-        // Multiple duplicates detected
         $this->assertGreaterThanOrEqual(1, $result->errors->count());
         $this->assertStringContainsString('duplicate', strtolower($result->errors->first()));
     }
 
     public function test_message_parser(): void
     {
-
         $signature = 'send {recipient} {--verbose}';
         $query = 'send John --verbose <greeting="Hello World"> <later="goodby">';
 
         $result = $this->parser->parse($signature, $query);
 
-        // ✅ Accès aux données personnalisées
         $data = $result->custom_data->toArray();
 
         $this->assertSame('Hello World', $data['greeting']);
         $this->assertSame('goodby', $data['later']);
 
-        // ✅ Accès aux données standards (la requête a été nettoyée)
         $this->assertSame('send', $result->source);
         $this->assertSame('John', $result->required->first()->value);
         $this->assertTrue($result->flags->first()->value);
@@ -614,12 +610,10 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        // ✅ Standard components
         $this->assertSame('send', $result->source);
         $this->assertSame('John', $result->required->first()->value);
         $this->assertTrue($result->flags->first()->value);
 
-        // ✅ Custom data
         $data = $result->custom_data->toArray();
         $this->assertArrayHasKey('greeting', $data);
         $this->assertSame('Hello World', $data['greeting']);
@@ -703,12 +697,10 @@ final class SignatureParserTest extends TestCase
 
         $result = $this->parser->parse($signature, $query);
 
-        // ✅ Données standards
         $this->assertSame('send', $result->source);
         $this->assertSame('John', $result->required->first()->value);
         $this->assertTrue($result->flags->first()->value);
 
-        // ✅ Données personnalisées
         $data = $result->custom_data->toArray();
         $this->assertArrayHasKey('greeting', $data);
         $this->assertSame('Hello', $data['greeting']);
@@ -736,5 +728,309 @@ final class SignatureParserTest extends TestCase
 
         $this->assertFalse($result->isValid);
         $this->assertNotEmpty($result->errors);
+    }
+
+    // ==================== ENUM TESTS ====================
+
+    public function test_parse_enum_with_default_value(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle';
+        $query = 'set-level master';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('set-level', $result->source);
+        $this->assertNotEmpty($result->enum);
+        $this->assertSame('master', $result->enum->get('level'));
+        $this->assertSame(['beginner', 'middle', 'master'], $result->enum->getAllowedValues('level'));
+    }
+
+    public function test_parse_enum_with_default_value_when_not_provided(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle';
+        $query = 'set-level';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('set-level', $result->source);
+        $this->assertSame('middle', $result->enum->get('level'));
+    }
+
+    public function test_parse_enum_with_optional_and_tilde(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=?';
+        $query = 'set-level ~';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('set-level', $result->source);
+        $this->assertNull($result->enum->get('level'));
+    }
+
+    public function test_parse_enum_with_required(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=*';
+        $query = 'set-level beginner';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('set-level', $result->source);
+        $this->assertSame('beginner', $result->enum->get('level'));
+    }
+
+    public function test_parse_multiple_enums(): void
+    {
+        $signature = 'config ::level->[low,medium,high]=medium ::mode->[dev,staging,prod]=dev';
+        $query = 'config high staging';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('config', $result->source);
+        $this->assertSame('high', $result->enum->get('level'));
+        $this->assertSame('staging', $result->enum->get('mode'));
+    }
+
+    public function test_parse_enum_with_flags(): void
+    {
+        $signature = 'deploy ::env->[dev,staging,prod]=staging --force';
+        $query = 'deploy prod --force';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('deploy', $result->source);
+        $this->assertSame('prod', $result->enum->get('env'));
+        $this->assertTrue($result->flags->first()->value);
+    }
+
+    public function test_parse_enum_with_custom_tags(): void
+    {
+        $signature = 'send ::priority->[low,medium,high]=medium --verbose';
+        $query = 'send high --verbose <user="admin">';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('send', $result->source);
+        $this->assertSame('high', $result->enum->get('priority'));
+        $this->assertTrue($result->flags->first()->value);
+
+        $data = $result->custom_data->toArray();
+        $this->assertSame('admin', $data['user']);
+    }
+
+    public function test_parse_enum_with_required_and_missing_value_returns_null(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=*';
+        $query = 'set-level';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('set-level', $result->source);
+        $this->assertNull($result->enum->get('level'));
+    }
+
+    public function test_parse_enum_with_invalid_value_uses_default(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle';
+        $query = 'set-level expert';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertSame('set-level', $result->source);
+        $this->assertSame('middle', $result->enum->get('level'));
+    }
+
+    public function test_enum_parser_removes_enum_token_from_signature(): void
+    {
+        $parser = new EnumParser;
+        $signature = ['set-level', '::level->[beginner,middle,master]=middle', '--verbose'];
+        $query = ['set-level', 'master', '--verbose'];
+
+        $result = $parser->parse($signature, $query);
+
+        $this->assertSame(['set-level', '--verbose'], $result->signature->toArray());
+        $this->assertSame(['set-level', '--verbose'], $result->query->toArray());
+    }
+
+    public function test_validate_enum_returns_valid_for_correct_value(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle';
+        $query = 'set-level master';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_enum_returns_valid_for_default_value(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle';
+        $query = 'set-level';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+    }
+
+    public function test_validate_enum_returns_invalid_for_invalid_value(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle';
+        $query = 'set-level expert';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('Invalid value', $result->errors->first());
+    }
+
+    public function test_validate_enum_returns_invalid_for_required_missing(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=*';
+        $query = 'set-level';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('Missing required', $result->errors->first());
+    }
+
+    public function test_validate_enum_returns_invalid_for_tilde_on_non_optional(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=*';
+        $query = 'set-level ~';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Cannot use '~'", $result->errors->first());
+    }
+
+    public function test_validate_enum_returns_invalid_for_invalid_default(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=expert';
+        $query = 'set-level';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('Default value', $result->errors->first());
+    }
+
+    public function test_validate_enum_with_empty_allowed_values_returns_error(): void
+    {
+        $signature = 'set-level ::level->[]=*';
+        $query = 'set-level value';
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString('no allowed values', $result->errors->first());
+    }
+
+    public function test_enum_collection_methods(): void
+    {
+        $signature = 'config ::level->[low,medium,high]=medium ::mode->[dev,staging,prod]=dev';
+        $query = 'config high staging';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $enum = $result->enum;
+
+        $this->assertTrue($enum->has('level'));
+        $this->assertTrue($enum->has('mode'));
+        $this->assertFalse($enum->has('unknown'));
+
+        $this->assertSame('high', $enum->get('level'));
+        $this->assertSame('staging', $enum->get('mode'));
+        $this->assertNull($enum->get('unknown'));
+
+        $this->assertSame(['level', 'mode'], $enum->getNames());
+        $this->assertSame(['high', 'staging'], $enum->getValues());
+
+        $this->assertSame(['low', 'medium', 'high'], $enum->getAllowedValues('level'));
+        $this->assertSame(['dev', 'staging', 'prod'], $enum->getAllowedValues('mode'));
+        $this->assertNull($enum->getAllowedValues('unknown'));
+
+        $this->assertTrue($enum->isAllowed('level', 'high'));
+        $this->assertFalse($enum->isAllowed('level', 'unknown'));
+
+        $this->assertFalse($enum->isRequired('level'));
+        $this->assertFalse($enum->isRequired('mode'));
+
+        $this->assertFalse($enum->isOptional('level'));
+        $this->assertFalse($enum->isOptional('mode'));
+
+        $this->assertTrue($enum->hasDefault('level'));
+        $this->assertTrue($enum->hasDefault('mode'));
+        $this->assertFalse($enum->hasDefault('unknown'));
+
+        $this->assertSame('medium', $enum->getDefault('level'));
+        $this->assertSame('dev', $enum->getDefault('mode'));
+    }
+
+    public function test_enum_with_required_state(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=*';
+        $query = 'set-level master';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertTrue($result->enum->isRequired('level'));
+        $this->assertFalse($result->enum->isOptional('level'));
+        $this->assertFalse($result->enum->hasDefault('level'));
+    }
+
+    public function test_enum_with_optional_state(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=?';
+        $query = 'set-level ~';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertFalse($result->enum->isRequired('level'));
+        $this->assertTrue($result->enum->isOptional('level'));
+        $this->assertFalse($result->enum->hasDefault('level'));
+    }
+
+    public function test_enum_with_defaulted_state(): void
+    {
+        $signature = 'set-level ::level->[beginner,middle,master]=middle';
+        $query = 'set-level';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $this->assertFalse($result->enum->isRequired('level'));
+        $this->assertFalse($result->enum->isOptional('level'));
+        $this->assertTrue($result->enum->hasDefault('level'));
+        $this->assertSame('middle', $result->enum->getDefault('level'));
+    }
+
+    public function test_enum_to_associative_array(): void
+    {
+        $signature = 'config ::level->[low,medium,high]=medium ::mode->[dev,staging,prod]=dev';
+        $query = 'config high staging';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $array = $result->enum->toAssociativeArray();
+
+        $this->assertSame(['level' => 'high', 'mode' => 'staging'], $array);
+    }
+
+    public function test_enum_to_full_array(): void
+    {
+        $signature = 'config ::level->[low,medium,high]=medium ::mode->[dev,staging,prod]=dev';
+        $query = 'config high staging';
+
+        $result = $this->parser->parse($signature, $query);
+
+        $fullArray = $result->enum->toFullArray();
+
+        $this->assertCount(2, $fullArray);
+        $this->assertSame('level', $fullArray[0]['name']);
+        $this->assertSame('high', $fullArray[0]['value']);
+        $this->assertSame(['low', 'medium', 'high'], $fullArray[0]['allowed_values']);
+        $this->assertSame('medium', $fullArray[0]['default_value']);
     }
 }
