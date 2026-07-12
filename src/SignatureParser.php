@@ -42,6 +42,7 @@ use InvalidArgumentException;
  * - Boolean flags: {--flag}
  * - Enum arguments: ::name->[value1,value2,value3]=default
  * - Custom tags: <key="value">
+ * - Argument comments: {name}#'comment' or ::name->[values]#"comment" or {--flag}#'comment'
  *
  * @example
  * $parser = new SignatureParser();
@@ -106,7 +107,10 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     public function parse(string $signature, string $query): ParsedSignatureRecord
     {
-        $signatureElements = $this->extractSignatureElements($signature);
+        // Nettoyer les commentaires de la signature
+        $cleanSignature = $this->cleanSignatureComments($signature);
+
+        $signatureElements = $this->extractSignatureElements($cleanSignature);
         $queryElements = $this->extractQueryElements($query);
 
         $orderErrors = $this->validateSignatureOrder($signatureElements);
@@ -139,7 +143,10 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     public function validate(string $signature, string $query): ValidationResultRecord
     {
-        $signatureElements = $this->extractSignatureElements($signature);
+        // Nettoyer les commentaires de la signature
+        $cleanSignature = $this->cleanSignatureComments($signature);
+
+        $signatureElements = $this->extractSignatureElements($cleanSignature);
         $queryElements = $this->extractQueryElements($query);
 
         $errors = new StringTypedCollection;
@@ -191,10 +198,13 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      */
     public function validateSignature(string $signature): ValidationResultRecord
     {
+        // Nettoyer les commentaires de la signature
+        $cleanSignature = $this->cleanSignatureComments($signature);
+
         $errors = new StringTypedCollection;
         $suggestions = new StringTypedCollection;
 
-        $elements = $this->extractSignatureElements($signature);
+        $elements = $this->extractSignatureElements($cleanSignature);
 
         if ($elements->isEmpty()) {
             $errors->add('Signature cannot be empty');
@@ -316,6 +326,38 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
     }
 
     /**
+     * Removes comments from signature arguments.
+     *
+     * Comments are defined with '#' followed by a quoted string after the argument:
+     * - {name}#'comment' becomes {name}
+     * - {name*>[values]}#'comment' becomes {name*>[values]}
+     * - ::name->[values]#'comment' becomes ::name->[values]
+     * - {--flag}#'comment' becomes {--flag}
+     *
+     * Comments can use single quotes (') or double quotes (").
+     *
+     * @param  string  $signature  The signature with comments
+     * @return string The signature without comments
+     */
+    private function cleanSignatureComments(string $signature): string
+    {
+        // Pattern pour les arguments entre accolades avec commentaire
+        // {name}#'comment' ou {name*>[values]}#'comment'
+        $pattern = '/\{([^}]+)\}#\s*([\'"])([^\'"]*)\2/';
+        $cleaned = preg_replace_callback($pattern, function ($matches) {
+            return '{'.$matches[1].'}';
+        }, $signature);
+
+        // Pattern pour les enums ::name->[values]#'comment'
+        $pattern = '/(::[a-zA-Z_][a-zA-Z0-9_]*->\[[^\]]+\](?:=[^ ]+)?)#\s*([\'"])([^\'"]*)\2/';
+        $cleaned = preg_replace_callback($pattern, function ($matches) {
+            return $matches[1];
+        }, $cleaned);
+
+        return $cleaned;
+    }
+
+    /**
      * Validates the order of arguments in the signature.
      *
      * Expected order:
@@ -323,8 +365,9 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
      * 2. Required arguments: {name}
      * 3. Default arguments: {name=value}
      * 4. Optional arguments: {name=?}
-     * 5. Variadic arguments: {name*} or {name*>[value1,value2]}
-     * 6. Flags: {--flag}
+     * 5. Enum arguments: ::name->[values]
+     * 6. Variadic arguments: {name*} or {name*>[value1,value2]}
+     * 7. Flags: {--flag}
      *
      * @return StringTypedCollection The order errors
      */
@@ -360,15 +403,19 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
             }
 
             if ($type === 'required' && $lastType !== 'source' && $lastType !== 'required') {
-                $errors->add("Required argument '{$element}' must appear before default, optional, variadic or flags");
+                $errors->add("Required argument '{$element}' must appear before default, enum, variadic or flags");
             }
 
             if ($type === 'default' && $lastType !== 'source' && $lastType !== 'required' && $lastType !== 'default') {
-                $errors->add("Default argument '{$element}' must appear after required arguments and before optional, variadic or flags");
+                $errors->add("Default argument '{$element}' must appear after required arguments and before enum, variadic or flags");
             }
 
-            if ($type === 'variadic' && $lastType !== 'source' && $lastType !== 'required' && $lastType !== 'default' && $lastType !== 'variadic') {
-                $errors->add("Variadic argument '{$element}' must appear after required and default arguments");
+            if ($type === 'enum' && $lastType !== 'source' && $lastType !== 'required' && $lastType !== 'default' && $lastType !== 'enum') {
+                $errors->add("Enum argument '{$element}' must appear after default arguments and before variadic or flags");
+            }
+
+            if ($type === 'variadic' && $lastType !== 'source' && $lastType !== 'required' && $lastType !== 'default' && $lastType !== 'enum' && $lastType !== 'variadic') {
+                $errors->add("Variadic argument '{$element}' must appear after required, default and enum arguments");
             }
 
             $lastType = $type;
@@ -384,6 +431,10 @@ final class SignatureParser implements ParserRegistryInterface, SignatureParserI
     {
         if (str_starts_with($element, '--')) {
             return 'flags';
+        }
+
+        if (str_starts_with($element, '::')) {
+            return 'enum';
         }
 
         if (str_contains($element, '*')) {

@@ -553,7 +553,8 @@ final class SignatureStructureVOTest extends TestCase
         $this->assertFalse($vo->isValid());
         $errors = $vo->getValidationErrors();
         $this->assertNotEmpty($errors);
-        $this->assertStringContainsString('must appear after required', $errors[0]);
+        $this->assertStringContainsString('Enum argument', $errors[0]);
+        $this->assertStringContainsString('must appear after default arguments and before variadic or flags', $errors[0]);
     }
 
     public function test_validation_passes_with_nullable_arguments(): void
