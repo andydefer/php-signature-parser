@@ -15,7 +15,7 @@ use AndyDefer\SignatureParser\Records\ValidationResultRecord;
  *
  * Syntax:
  * - ::name->[value1,value2,value3]=*  → Required enum (must be provided)
- * - ::name->[value1,value2,value3]=?  → Optional enum (can be null with '~')
+ * - ::name->[value1,value2,value3]=?  → Optional enum (can be null with '_')
  * - ::name->[value1,value2,value3]=default → Enum with default value
  *
  * @example
@@ -24,7 +24,7 @@ use AndyDefer\SignatureParser\Records\ValidationResultRecord;
  * Result: ['enums' => ['level' => ['value' => 'master', 'allowed_values' => [...], ...]]]
  * @example
  * Signature: 'set-level ::level->[beginner,middle,master]=?'
- * Query: 'set-level ~'
+ * Query: 'set-level _'
  * Result: ['enums' => ['level' => ['value' => null, ...]]]
  * @example
  * Signature: 'set-level ::level->[beginner,middle,master]=middle'
@@ -61,8 +61,8 @@ final class EnumParser implements ParserInterface
                 if (isset($query[$queryIndex])) {
                     $queryToken = $query[$queryIndex];
 
-                    // Skip token (~) => null (pour nullable)
-                    if ($queryToken === '~' && $isOptional) {
+                    // Skip token (_) => null (pour nullable)
+                    if ($queryToken === '_' && $isOptional) {
                         $value = null;
                         $valueState = ValueState::OPTIONAL;
                         $queryIndex++;
@@ -151,10 +151,10 @@ final class EnumParser implements ParserInterface
                 if (isset($query[$queryIndex])) {
                     $queryToken = $query[$queryIndex];
 
-                    // Skip token (~) est valide uniquement pour optional
-                    if ($queryToken === '~') {
+                    // Skip token (_) est valide uniquement pour optional
+                    if ($queryToken === '_') {
                         if (! $isOptional) {
-                            $errors->add("Cannot use '~' for non-optional enum '{$name}'. Allowed: {$allowedList}");
+                            $errors->add("Cannot use '_' for non-optional enum '{$name}'. Allowed: {$allowedList}");
                             $suggestions->add("Use one of: {$allowedList}");
                         }
                         $queryIndex++;
@@ -165,7 +165,7 @@ final class EnumParser implements ParserInterface
                     // Vérifier si la valeur est autorisée
                     if (! in_array($queryToken, $allowedValues, true)) {
                         $errors->add("Invalid value '{$queryToken}' for enum '{$name}'. Allowed: {$allowedList}");
-                        $suggestions->add("Use one of: {$allowedList}".($isOptional ? " or '~' for null" : ''));
+                        $suggestions->add("Use one of: {$allowedList}".($isOptional ? " or '_' for null" : ''));
                     }
 
                     $queryIndex++;

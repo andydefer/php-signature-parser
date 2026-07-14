@@ -19,26 +19,26 @@ SignatureParserInterface
 - Analyser une signature et une requête pour en extraire tous les composants
 - Valider la syntaxe et l'ordre des arguments
 - Gérer les commentaires inline via `CommentManager`
-- Gérer les placeholders `~` pour les valeurs manquantes
+- Gérer les placeholders `_` pour les valeurs manquantes
 - Produire un enregistrement structuré (`ParsedSignatureRecord`)
 
 ---
 
 ## Concepts fondamentaux
 
-### Le placeholder `~` (tilde)
+### Le placeholder `_` (tilde)
 
-Le tilde `~` est un placeholder utilisé pour représenter une valeur manquante, nulle ou ignorée dans une requête. Il permet de respecter l'ordre des arguments sans avoir à fournir une valeur explicite.
+Le tilde `_` est un placeholder utilisé pour représenter une valeur manquante, nulle ou ignorée dans une requête. Il permet de respecter l'ordre des arguments sans avoir à fournir une valeur explicite.
 
-**Pourquoi utiliser `~` ?**
+**Pourquoi utiliser `_` ?**
 
-| Situation | Utilisation de `~` | Exemple |
+| Situation | Utilisation de `_` | Exemple |
 |-----------|-------------------|---------|
 | Argument requis manquant | ❌ Non autorisé | Le parsing échoue |
-| Argument nullable | ✅ Oui | `{output=?}` → `~` |
-| Argument par défaut | ✅ Oui | `{format=zip}` → `~` |
-| Enum optionnel | ✅ Oui | `::level->[low,high]=?` → `~` |
-| Enum avec défaut | ✅ Oui | `::level->[low,high]=medium` → `~` |
+| Argument nullable | ✅ Oui | `{output=?}` → `_` |
+| Argument par défaut | ✅ Oui | `{format=zip}` → `_` |
+| Enum optionnel | ✅ Oui | `::level->[low,high]=?` → `_` |
+| Enum avec défaut | ✅ Oui | `::level->[low,high]=medium` → `_` |
 
 **Exemple concret :**
 
@@ -46,13 +46,13 @@ Le tilde `~` est un placeholder utilisé pour représenter une valeur manquante,
 // Signature
 $signature = 'backup {source} {destination} {format=zip} {output=?}';
 
-// Requête avec ~ pour l'argument nullable
-$query = 'backup /var/www /backup ~ ~';
+// Requête avec _ pour l'argument nullable
+$query = 'backup /var/www /backup _ _';
 // Résultat:
 // source = '/var/www'
 // destination = '/backup'
-// format = 'zip' (valeur par défaut, car ~)
-// output = null (nullable, car ~)
+// format = 'zip' (valeur par défaut, car _)
+// output = null (nullable, car _)
 ```
 
 ### Commentaires inline
@@ -206,7 +206,7 @@ echo $result->requireds->get('source'); // '/var/www'
 
 // Comportement
 // - Si la valeur est fournie → utilise la valeur fournie
-// - Si '~' est fourni → utilise la valeur par défaut
+// - Si '_' est fourni → utilise la valeur par défaut
 // - Si rien n'est fourni → utilise la valeur par défaut
 
 // Exemple
@@ -217,7 +217,7 @@ $result = $parser->parse(
 
 $result = $parser->parse(
     'backup {format=zip}',
-    'backup ~'  // format = 'zip' (valeur par défaut)
+    'backup _'  // format = 'zip' (valeur par défaut)
 );
 
 $result = $parser->parse(
@@ -233,7 +233,7 @@ $result = $parser->parse(
 
 // Comportement
 // - Si une valeur est fournie → utilise la valeur
-// - Si '~' est fourni → valeur = null
+// - Si '_' est fourni → valeur = null
 // - Si rien n'est fourni → valeur = null
 
 // Exemple
@@ -244,7 +244,7 @@ $result = $parser->parse(
 
 $result = $parser->parse(
     'backup {output=?}',
-    'backup ~'  // output = null
+    'backup _'  // output = null
 );
 
 $result = $parser->parse(
@@ -260,7 +260,7 @@ $result = $parser->parse(
 
 // États possibles
 // - =*  → Requis (doit être fourni)
-// - =?  → Optionnel (peut être '~')
+// - =?  → Optionnel (peut être '_')
 // - =default → Valeur par défaut
 
 // Exemple avec défaut
@@ -271,7 +271,7 @@ $result = $parser->parse(
 
 $result = $parser->parse(
     'set-level ::level->[low,medium,high]=medium',
-    'set-level ~'  // level = 'medium' (valeur par défaut)
+    'set-level _'  // level = 'medium' (valeur par défaut)
 );
 
 // Exemple requis
@@ -284,7 +284,7 @@ $result = $parser->parse(
 // Exemple optionnel
 $result = $parser->parse(
     'set-level ::level->[low,medium,high]=?',
-    'set-level ~'  // level = null
+    'set-level _'  // level = null
 );
 ```
 
@@ -347,9 +347,9 @@ echo $data['greeting']; // 'Hello World'
 
 ---
 
-## Gestion du placeholder `~` (détail)
+## Gestion du placeholder `_` (détail)
 
-Le tilde `~` est un mécanisme essentiel pour maintenir l'ordre des arguments sans fournir de valeur.
+Le tilde `_` est un mécanisme essentiel pour maintenir l'ordre des arguments sans fournir de valeur.
 
 ### Pourquoi est-ce important ?
 
@@ -357,17 +357,17 @@ Le tilde `~` est un mécanisme essentiel pour maintenir l'ordre des arguments sa
 // Signature
 $signature = 'backup {source} {destination} {format=zip} {output=?} {--force}';
 
-// ❌ Sans ~, impossible de sauter un argument
+// ❌ Sans _, impossible de sauter un argument
 // 'backup /var/www tar.gz --force' → destination manquant
 
-// ✅ Avec ~
-$query = 'backup /var/www /backup ~ ~ --force';
+// ✅ Avec _
+$query = 'backup /var/www /backup _ _ --force';
 // Résultat: tout est correctement positionné
 ```
 
 ### Tableau des comportements
 
-| Type d'argument | Sans `~` | Avec `~` |
+| Type d'argument | Sans `_` | Avec `_` |
 |-----------------|----------|----------|
 | Required | ❌ Erreur | ❌ Erreur (non autorisé) |
 | Default | Utilise la valeur par défaut | Utilise la valeur par défaut |
@@ -391,8 +391,8 @@ $signature = 'backup {source} {destination} {format=zip} {output=?} ::level->[lo
 $query1 = 'backup /var/www /backup tar.gz /tmp high [cache,logs] --force --verbose';
 $result1 = $parser->parse($signature, $query1);
 
-// Avec ~ pour les arguments optionnels
-$query2 = 'backup /var/www /backup ~ ~ ~ [] --force';
+// Avec _ pour les arguments optionnels
+$query2 = 'backup /var/www /backup _ _ _ [] --force';
 $result2 = $parser->parse($signature, $query2);
 // format = 'zip', output = null, level = 'medium', excludes = []
 ```
@@ -403,7 +403,7 @@ $result2 = $parser->parse($signature, $query2);
 $parser = new SignatureParser();
 
 $signature = 'backup {source} {destination} {format=zip}';
-$query = 'backup /var/www ~';
+$query = 'backup /var/www _';
 
 $result = $parser->validate($signature, $query);
 if (!$result->isValid) {
@@ -489,7 +489,7 @@ echo $result->flags->first()->comment; // 'Force overwrite'
 | Signature vide | Erreur de validation | `Signature cannot be empty` |
 | Requis manquant | Erreur de validation | `Missing required argument: '{$name}'` |
 | Enum invalide | Erreur de validation | `Invalid value '{$value}' for enum '{$name}'` |
-| `~` sur non-optional | Erreur de validation | `Cannot use '~' for non-optional enum '{$name}'` |
+| `_` sur non-optional | Erreur de validation | `Cannot use '_' for non-optional enum '{$name}'` |
 | Tag non fermé | Erreur de validation | `Unclosed custom tag` |
 
 ---
@@ -526,8 +526,8 @@ $parser = new SignatureParser();
 
 $signature = 'backup {source}#"Source directory" {destination} {format=zip}#"Archive format" {output=?}#"Output directory" ::level->[low,medium,high]=medium#"Compression level" {excludes*}#"Files to exclude" {--force}#"Force overwrite" {--verbose}';
 
-// Requête avec ~ pour les arguments optionnels
-$query = 'backup /var/www /backup tar.gz ~ high [cache,logs,tmp] --force';
+// Requête avec _ pour les arguments optionnels
+$query = 'backup /var/www /backup tar.gz _ high [cache,logs,tmp] --force';
 
 $result = $parser->parse($signature, $query);
 

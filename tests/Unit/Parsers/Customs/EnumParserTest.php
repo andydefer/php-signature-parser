@@ -53,7 +53,7 @@ final class EnumParserTest extends TestCase
     public function test_parse_handles_optional_enum_with_tilde(): void
     {
         $signature = ['set-level', '::level->[beginner,middle,master]=?'];
-        $query = ['set-level', '~'];
+        $query = ['set-level', '_'];
 
         $result = $this->parser->parse($signature, $query);
 
@@ -191,7 +191,7 @@ final class EnumParserTest extends TestCase
     public function test_validate_returns_valid_for_optional_with_tilde(): void
     {
         $signature = ['set-level', '::level->[beginner,middle,master]=?'];
-        $query = ['set-level', '~'];
+        $query = ['set-level', '_'];
 
         $result = $this->parser->validate($signature, $query);
 
@@ -226,12 +226,12 @@ final class EnumParserTest extends TestCase
     public function test_validate_returns_invalid_for_tilde_on_non_optional(): void
     {
         $signature = ['set-level', '::level->[beginner,middle,master]=*'];
-        $query = ['set-level', '~'];
+        $query = ['set-level', '_'];
 
         $result = $this->parser->validate($signature, $query);
 
         $this->assertFalse($result->isValid);
-        $this->assertStringContainsString("Cannot use '~' for non-optional enum", $result->errors->first());
+        $this->assertStringContainsString("Cannot use '_' for non-optional enum", $result->errors->first());
         $this->assertStringContainsString('beginner, middle, master', $result->suggestions->first());
     }
 

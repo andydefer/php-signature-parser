@@ -119,7 +119,7 @@ Extrait les arguments requis de la signature. Un argument requis est un token si
 
 - Identifie les tokens simples dans la signature
 - Associe chaque token à la valeur correspondante dans la requête
-- Utilise `~` comme placeholder pour les valeurs manquantes
+- Utilise `_` comme placeholder pour les valeurs manquantes
 
 ## API
 
@@ -168,7 +168,7 @@ Extrait les arguments avec valeur par défaut et les arguments nullables.
 
 - Traite les tokens avec `=` (valeur par défaut)
 - Gère les nullables avec `{name=?}`
-- Utilise `~` comme valeur nulle explicite
+- Utilise `_` comme valeur nulle explicite
 
 ## API
 
@@ -198,9 +198,9 @@ $result = $parser->parse(['format=zip'], []);
 // ['defaults' => ['format' => 'zip']]
 ```
 
-### Cas 3 : Nullable avec `~`
+### Cas 3 : Nullable avec `_`
 ```php
-$result = $parser->parse(['output=?'], ['~']);
+$result = $parser->parse(['output=?'], ['_']);
 // ['defaults' => ['output' => null]]
 ```
 
@@ -230,7 +230,7 @@ Extrait les arguments de type énumération avec valeurs autorisées et états (
 | Syntaxe | État | Description |
 |---------|------|-------------|
 | `::name->[values]=*` | REQUIRED | Doit être fourni |
-| `::name->[values]=?` | OPTIONAL | Peut être `~` |
+| `::name->[values]=?` | OPTIONAL | Peut être `_` |
 | `::name->[values]=default` | DEFAULTED | Valeur par défaut |
 
 ## API
@@ -276,11 +276,11 @@ $result = $parser->parse(
 // value = 'medium', value_state = REQUIRED
 ```
 
-### Cas 3 : Enum optionnel avec `~`
+### Cas 3 : Enum optionnel avec `_`
 ```php
 $result = $parser->parse(
     ['::level->[low,medium,high]=?'],
-    ['~']
+    ['_']
 );
 // value = null, value_state = OPTIONAL
 ```
@@ -292,7 +292,7 @@ $result = $parser->parse(
 | Aucune valeur autorisée | `Enum '{$name}' has no allowed values` |
 | Valeur par défaut invalide | `Default value '{$value}' is not in allowed values` |
 | Valeur invalide | `Invalid value '{$value}' for enum '{$name}'` |
-| `~` sur non-optional | `Cannot use '~' for non-optional enum '{$name}'` |
+| `_` sur non-optional | `Cannot use '_' for non-optional enum '{$name}'` |
 | Requis manquant | `Missing required enum value for '{$name}'` |
 
 ---

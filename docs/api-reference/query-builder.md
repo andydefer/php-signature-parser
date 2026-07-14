@@ -8,7 +8,7 @@ Le `QueryBuilder` est un constructeur de requêtes CLI qui permet de construire 
 
 - Construire des requêtes CLI valides à partir d'une signature
 - Valider automatiquement les valeurs par rapport à la signature
-- Gérer les valeurs par défaut et les placeholders (`~`)
+- Gérer les valeurs par défaut et les placeholders (`_`)
 - Fournir une API fluide pour définir chaque type d'argument
 
 ---
@@ -529,7 +529,7 @@ $query = $builder
     ->build();
 
 echo $query;
-// backup /var/www /backup tar.gz ~ high [cache, logs, tmp] --force --verbose <user="admin">
+// backup /var/www /backup tar.gz _ high [cache, logs, tmp] --force --verbose <user="admin">
 ```
 
 ## Voir aussi

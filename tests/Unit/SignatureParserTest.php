@@ -760,7 +760,7 @@ final class SignatureParserTest extends TestCase
     public function test_parse_enum_with_optional_and_tilde(): void
     {
         $signature = 'set-level ::level->[beginner,middle,master]=?';
-        $query = 'set-level ~';
+        $query = 'set-level _';
 
         $result = $this->parser->parse($signature, $query);
 
@@ -899,12 +899,12 @@ final class SignatureParserTest extends TestCase
     public function test_validate_enum_returns_invalid_for_tilde_on_non_optional(): void
     {
         $signature = 'set-level ::level->[beginner,middle,master]=*';
-        $query = 'set-level ~';
+        $query = 'set-level _';
 
         $result = $this->parser->validate($signature, $query);
 
         $this->assertFalse($result->isValid);
-        $this->assertStringContainsString("Cannot use '~'", $result->errors->first());
+        $this->assertStringContainsString("Cannot use '_'", $result->errors->first());
     }
 
     public function test_validate_enum_returns_invalid_for_invalid_default(): void
@@ -985,7 +985,7 @@ final class SignatureParserTest extends TestCase
     public function test_enum_with_optional_state(): void
     {
         $signature = 'set-level ::level->[beginner,middle,master]=?';
-        $query = 'set-level ~';
+        $query = 'set-level _';
 
         $result = $this->parser->parse($signature, $query);
 

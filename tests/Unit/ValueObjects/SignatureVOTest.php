@@ -88,7 +88,7 @@ final class SignatureVOTest extends TestCase
     {
         $vo = new SignatureVO(
             'deploy {env=?}',
-            'deploy ~'
+            'deploy _'
         );
 
         $this->assertNull($vo->getDefault('env'));
@@ -267,7 +267,7 @@ final class SignatureVOTest extends TestCase
     {
         $vo = new SignatureVO(
             'set-level ::level->[beginner,middle,master]=?',
-            'set-level ~'
+            'set-level _'
         );
 
         $this->assertNull($vo->getEnum('level'));
@@ -493,7 +493,7 @@ final class SignatureVOTest extends TestCase
     public function test_complex_command(): void
     {
         $signature = 'backup {source} {destination} {format=zip} {output=dist} ::level->[beginner,middle,master]=middle {excludes*} {purpose*} {--force} {--verbose}';
-        $query = 'backup /var/www /backup tar.gz ~ master [cache, logs, tmp] [home, data, models] --force';
+        $query = 'backup /var/www /backup tar.gz _ master [cache, logs, tmp] [home, data, models] --force';
 
         $vo = new SignatureVO($signature, $query);
 
@@ -572,7 +572,7 @@ final class SignatureVOTest extends TestCase
     public function test_command_with_custom_tags_and_all_components(): void
     {
         $signature = 'deploy  {environment} {version=?} ::level->[low,medium,high]=medium  {--force}';
-        $query = 'deploy staging ~ high --force <user="admin"> <timestamp="2026-07-10">';
+        $query = 'deploy staging _ high --force <user="admin"> <timestamp="2026-07-10">';
 
         $vo = new SignatureVO($signature, $query);
 
@@ -795,7 +795,7 @@ final class SignatureVOTest extends TestCase
     {
         $vo = new SignatureVO(
             'set-level ::level->[beginner,middle,master]=?',
-            'set-level ~'
+            'set-level _'
         );
 
         $this->assertTrue($vo->isValid());
@@ -806,11 +806,11 @@ final class SignatureVOTest extends TestCase
     {
         $vo = new SignatureVO(
             'set-level ::level->[beginner,middle,master]=*',
-            'set-level ~'
+            'set-level _'
         );
 
         $this->assertFalse($vo->isValid());
         $this->assertCount(1, $vo->getValidationErrors());
-        $this->assertStringContainsString("Cannot use '~'", $vo->getValidationErrors()->first());
+        $this->assertStringContainsString("Cannot use '_'", $vo->getValidationErrors()->first());
     }
 }

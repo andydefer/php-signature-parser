@@ -9,9 +9,9 @@ namespace AndyDefer\SignatureParser\Formatters;
  *
  * Handles special tokens:
  * - `?`  → `null` (explicitly null)
- * - `~`  → `null` (skip argument, use default)
+ * - `_`  → `null` (skip argument, use default)
  * - `??` → `?`   (escaped question mark)
- * - `~~` → `~`   (escaped tilde)
+ * - `__` → `_`   (escaped tilde)
  *
  * This formatter is used after parsing to normalize values before they are
  * stored in the final record. It works recursively on nested arrays.
@@ -31,7 +31,7 @@ final class TextFormatter
      *     'name'    => 'John^Doe',
      *     'address' => '123^Main^Street',
      *     'env'     => '?',
-     *     'skip'    => '~',
+     *     'skip'    => '_',
      *     'tags'    => ['PHP^8.4', '??'],
      *     'metadata' => ['message' => 'Hello^World!']
      * ];
@@ -80,9 +80,9 @@ final class TextFormatter
     public static function formatString(string $value): ?string
     {
         return match ($value) {
-            '?', '~' => null,
+            '?', '_' => null,
             '??' => '?',
-            '~~' => '~',
+            '__' => '_',
             default => str_replace('^', ' ', $value),
         };
     }

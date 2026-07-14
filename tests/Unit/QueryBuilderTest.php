@@ -69,7 +69,7 @@ final class QueryBuilderTest extends TestCase
         $builder = QueryBuilder::init('greet {name=?} {--formal}');
         $builder->setArgument('name', null);
 
-        $this->assertSame('~', $builder->getArgument('name'));
+        $this->assertSame('_', $builder->getArgument('name'));
     }
 
     public function test_set_argument_with_empty_string_on_default_uses_tilde(): void
@@ -78,7 +78,7 @@ final class QueryBuilderTest extends TestCase
         $builder = QueryBuilder::init($signature);
         $builder->setArgument('name', '');
 
-        $this->assertSame('~', $builder->getArgument('name'));
+        $this->assertSame('_', $builder->getArgument('name'));
     }
 
     public function test_set_argument_with_nonexistent_argument_throws_exception(): void
@@ -171,7 +171,7 @@ final class QueryBuilderTest extends TestCase
         $builder = QueryBuilder::init('backup {format=?}');
         $builder->setDefault('format', null);
 
-        $this->assertSame('~', $builder->getArgument('format'));
+        $this->assertSame('_', $builder->getArgument('format'));
     }
 
     // ==================== TESTS: setVariadic ====================
@@ -216,7 +216,7 @@ final class QueryBuilderTest extends TestCase
         $builder = QueryBuilder::init('set-level ::level->[beginner,middle,master]=?');
         $builder->setEnum('level', null);
 
-        $this->assertSame('~', $builder->getEnum('level'));
+        $this->assertSame('_', $builder->getEnum('level'));
     }
 
     public function test_set_enum_with_required_throws_exception_on_null(): void
@@ -281,8 +281,8 @@ final class QueryBuilderTest extends TestCase
 
         $query = $builder->build();
 
-        // ✅ '~' est ajouté car l'énum est présent mais null
-        $this->assertSame('set-level ~', $query);
+        // ✅ '_' est ajouté car l'énum est présent mais null
+        $this->assertSame('set-level _', $query);
     }
 
     public function test_set_enum_with_default_uses_default_value(): void
@@ -498,7 +498,7 @@ final class QueryBuilderTest extends TestCase
 
         $builder->reset();
 
-        $this->assertSame('~', $builder->getArgument('name'));
+        $this->assertSame('_', $builder->getArgument('name'));
         $this->assertFalse($builder->hasFlag('--formal'));
     }
 
@@ -568,7 +568,7 @@ final class QueryBuilderTest extends TestCase
 
         $query = $builder->build();
 
-        $this->assertSame('process-tasks ~ text', $query);
+        $this->assertSame('process-tasks _ text', $query);
     }
 
     public function test_build_with_default_values(): void
@@ -577,7 +577,7 @@ final class QueryBuilderTest extends TestCase
 
         $query = $builder->build();
 
-        $this->assertSame('backup ~ zip', $query);
+        $this->assertSame('backup _ zip', $query);
     }
 
     public function test_build_throws_exception_for_invalid_query(): void
@@ -645,7 +645,7 @@ final class QueryBuilderTest extends TestCase
     {
         $builder = QueryBuilder::init('greet {name} {--formal}', '');
 
-        $this->assertSame('~', $builder->getArgument('name'));
+        $this->assertSame('_', $builder->getArgument('name'));
         $this->assertFalse($builder->hasFlag('--formal'));
     }
 
@@ -654,7 +654,7 @@ final class QueryBuilderTest extends TestCase
         $builder = QueryBuilder::init('greet {name=John^Doe} {--formal}');
         $builder->setArgument('name', '');
 
-        $this->assertSame('~', $builder->getArgument('name'));
+        $this->assertSame('_', $builder->getArgument('name'));
     }
 
     public function test_set_argument_with_numeric_value(): void
@@ -713,7 +713,7 @@ final class QueryBuilderTest extends TestCase
 
         $query = $builder->build();
 
-        $this->assertSame('tasks-watch 30 ~ 5 ~ --verbose', $query);
+        $this->assertSame('tasks-watch 30 _ 5 _ --verbose', $query);
     }
 
     public function test_complete_deployment_signature(): void
@@ -760,7 +760,7 @@ final class QueryBuilderTest extends TestCase
 
         $query = $builder->build();
 
-        $this->assertSame('process-tasks ~ text', $query);
+        $this->assertSame('process-tasks _ text', $query);
     }
 
     public function test_build_with_nullable_set_to_value(): void
@@ -780,7 +780,7 @@ final class QueryBuilderTest extends TestCase
 
         $query = $builder->build();
 
-        $this->assertSame('tasks-watch 30 ~ ~', $query);
+        $this->assertSame('tasks-watch 30 _ _', $query);
     }
 
     public function test_set_argument_null_on_nullable_uses_tilde(): void
@@ -788,7 +788,7 @@ final class QueryBuilderTest extends TestCase
         $builder = QueryBuilder::init('process-tasks {limit=?}');
         $builder->setArgument('limit', null);
 
-        $this->assertSame('~', $builder->getArgument('limit'));
+        $this->assertSame('_', $builder->getArgument('limit'));
     }
 
     public function test_set_argument_empty_on_nullable_uses_tilde(): void
@@ -796,7 +796,7 @@ final class QueryBuilderTest extends TestCase
         $builder = QueryBuilder::init('process-tasks {limit=?}');
         $builder->setArgument('limit', '');
 
-        $this->assertSame('~', $builder->getArgument('limit'));
+        $this->assertSame('_', $builder->getArgument('limit'));
     }
 
     public function test_set_required_on_default_argument_throws_exception(): void

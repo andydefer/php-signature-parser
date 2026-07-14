@@ -22,7 +22,7 @@ use AndyDefer\SignatureParser\Records\ValidationResultRecord;
  */
 final class RequiredParser implements ParserInterface
 {
-    private const PLACEHOLDER_MISSING = '~';
+    private const PLACEHOLDER_MISSING = '_';
 
     /**
      * {@inheritDoc}

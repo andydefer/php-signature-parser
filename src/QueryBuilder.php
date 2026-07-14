@@ -85,7 +85,7 @@ final class QueryBuilder
             if (str_contains($name, '->[')) {
                 continue;
             }
-            $this->arguments[$name] = $defaultValue ?? '~';
+            $this->arguments[$name] = $defaultValue ?? '_';
         }
 
         foreach ($structure->getFlags() as $flag) {
@@ -109,7 +109,7 @@ final class QueryBuilder
         $queryTokens = explode(' ', $query);
 
         foreach ($parsed->requireds as $arg) {
-            $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '~';
+            $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '_';
         }
 
         foreach ($parsed->defaults as $arg) {
@@ -117,12 +117,12 @@ final class QueryBuilder
             if ($this->isEnumArgument($arg->name) || str_contains($arg->name, '->[')) {
                 continue;
             }
-            $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '~';
+            $this->arguments[$arg->name] = $arg->value !== '' ? $arg->value : '_';
         }
 
         foreach ($parsed->variadics as $arg) {
             $values = $arg->values->join(' ');
-            $this->arguments[$arg->name] = $values !== '' ? $values : '~';
+            $this->arguments[$arg->name] = $values !== '' ? $values : '_';
         }
 
         foreach ($parsed->flags as $flag) {
@@ -133,8 +133,8 @@ final class QueryBuilder
         foreach ($parsed->enums as $enum) {
             if ($enum->value !== null && in_array((string) $enum->value, $queryTokens, true)) {
                 $this->enums[$enum->name] = $enum->value;
-            } elseif ($enum->value === '~' && in_array('~', $queryTokens, true)) {
-                $this->enums[$enum->name] = '~';
+            } elseif ($enum->value === '_' && in_array('_', $queryTokens, true)) {
+                $this->enums[$enum->name] = '_';
             }
         }
 
@@ -176,15 +176,15 @@ final class QueryBuilder
         } elseif ($this->structure->hasDefault($name)) {
             if ($value === null) {
                 $defaults = $this->structure->getDefaults();
-                $this->arguments[$name] = $defaults[$name] ?? '~';
+                $this->arguments[$name] = $defaults[$name] ?? '_';
             } elseif ($value === '') {
-                $this->arguments[$name] = '~';
+                $this->arguments[$name] = '_';
             } else {
                 $this->arguments[$name] = $value;
             }
         } elseif ($this->structure->hasVariadic($name)) {
             if ($value === null || $value === '') {
-                $this->arguments[$name] = '~';
+                $this->arguments[$name] = '_';
             } else {
                 $this->arguments[$name] = $value;
             }
@@ -224,7 +224,7 @@ final class QueryBuilder
      * Sets a value for a default argument.
      *
      * @param  string  $name  The argument name
-     * @param  string|null  $value  The value (null uses the default or '~')
+     * @param  string|null  $value  The value (null uses the default or '_')
      *
      * @throws InvalidArgumentException If the argument does not exist or is not a default argument
      */
@@ -238,9 +238,9 @@ final class QueryBuilder
 
         if ($value === null) {
             $defaults = $this->structure->getDefaults();
-            $this->arguments[$name] = $defaults[$name] ?? '~';
+            $this->arguments[$name] = $defaults[$name] ?? '_';
         } elseif ($value === '') {
-            $this->arguments[$name] = '~';
+            $this->arguments[$name] = '_';
         } else {
             $this->arguments[$name] = $value;
         }
@@ -277,7 +277,7 @@ final class QueryBuilder
      * Sets a value for an enum argument.
      *
      * @param  string  $name  The enum name
-     * @param  string|null  $value  The value (null sets to default or '~')
+     * @param  string|null  $value  The value (null sets to default or '_')
      *
      * @throws InvalidArgumentException If the enum does not exist in the signature
      */
@@ -341,9 +341,9 @@ final class QueryBuilder
                 );
             }
             if ($isOptional) {
-                $this->enums[$name] = '~';
+                $this->enums[$name] = '_';
             } else {
-                $this->enums[$name] = $defaultValue ?? '~';
+                $this->enums[$name] = $defaultValue ?? '_';
             }
         } else {
             $this->enums[$name] = $value;
@@ -535,7 +535,7 @@ final class QueryBuilder
             if (str_contains($name, '->[')) {
                 continue;
             }
-            $this->arguments[$name] = $defaultValue ?? '~';
+            $this->arguments[$name] = $defaultValue ?? '_';
         }
 
         foreach ($this->structure->getFlags() as $flag) {
@@ -645,7 +645,7 @@ final class QueryBuilder
             if ($value !== null && $value !== '') {
                 $parts[] = $value;
             } else {
-                $parts[] = '~';
+                $parts[] = '_';
             }
         }
 
@@ -658,7 +658,7 @@ final class QueryBuilder
             if ($value !== null && $value !== '') {
                 $parts[] = $value;
             } else {
-                $parts[] = '~';
+                $parts[] = '_';
             }
         }
 

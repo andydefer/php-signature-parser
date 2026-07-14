@@ -478,7 +478,7 @@ use AndyDefer\SignatureParser\ValueObjects\SignatureVO;
 
 $vo = new SignatureVO(
     'backup {source} {destination} {format=zip} {output=?} ::level->[low,high]=medium {excludes*} {--force} {--verbose}',
-    'backup /var/www /backup tar.gz ~ high [cache,logs] --force'
+    'backup /var/www /backup tar.gz _ high [cache,logs] --force'
 );
 
 echo "Commande: " . $vo->getSource() . "\n";

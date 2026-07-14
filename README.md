@@ -1,6 +1,6 @@
 # PHP Signature Parser
 
-**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les nullables, les variadiques, les énumérations et les flags avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^`, des commentaires inline, des tokens spéciaux (`?`, `~`) et des tags personnalisés.**
+**Un parseur strict et typé pour les commandes CLI qui extrait la source, les arguments requis, les arguments par défaut, les nullables, les variadiques, les énumérations et les flags avec des Value Objects et des collections typées. Support automatique du formatage des espaces via le caractère `^`, des commentaires inline, des tokens spéciaux (`?`, `_`) et des tags personnalisés.**
 
 [![PHP Version](https://img.shields.io/badge/PHP-8.1%2B-blue)](https://php.net)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -15,7 +15,7 @@
 4. [Formatage des espaces avec `^`](#formatage-des-espaces-avec-)
 5. [Tokens spéciaux](#tokens-spéciaux)
    - [Le token `?` (null explicite)](#le-token--null-explicite)
-   - [Le token `~` (skip)](#le-token--skip)
+   - [Le token `_` (skip)](#le-token--skip)
 6. [Ordre strict des arguments](#ordre-strict-des-arguments)
 7. [Énumérations (Enum)](#énumérations-enum)
 8. [Tags personnalisés](#tags-personnalisés)
@@ -170,34 +170,34 @@ Le token `?` permet de passer explicitement `null` comme valeur.
 | Argument requis | `backup /var/www ?` | `destination = null` |
 | Argument par défaut | `deploy staging ?` | `env = null` (override) |
 
-### Le token `~` (skip)
+### Le token `_` (skip)
 
-Le token `~` permet de sauter un argument et d'utiliser la valeur par défaut ou `null` :
+Le token `_` permet de sauter un argument et d'utiliser la valeur par défaut ou `null` :
 
 | Cas | Comportement |
 |-----|--------------|
-| **Argument requis** | `~` → `null` |
-| **Argument par défaut** | `~` → utilise la valeur par défaut |
-| **Argument nullable** | `~` → `null` |
-| **Enum avec défaut** | `~` → utilise la valeur par défaut |
-| **Enum optionnel** | `~` → `null` |
+| **Argument requis** | `_` → `null` |
+| **Argument par défaut** | `_` → utilise la valeur par défaut |
+| **Argument nullable** | `_` → `null` |
+| **Enum avec défaut** | `_` → utilise la valeur par défaut |
+| **Enum optionnel** | `_` → `null` |
 
 ### Exemples
 
 ```php
 // Par défaut → valeur par défaut
 $signature = 'backup {source} {format=zip}';
-$query = 'backup /var/www ~';
+$query = 'backup /var/www _';
 // format = zip
 
 // Nullable → null
 $signature = 'deploy {env=?} {--force}';
-$query = 'deploy ~ --force';
+$query = 'deploy _ --force';
 // env = null
 
 // Enum avec défaut
 $signature = 'set-level ::level->[low,high]=medium';
-$query = 'set-level ~';
+$query = 'set-level _';
 // level = medium
 ```
 
@@ -255,7 +255,7 @@ Les énumérations permettent de restreindre les valeurs autorisées pour un arg
 | État | Syntaxe | Description |
 |------|---------|-------------|
 | **Requis** | `=*` | Doit être fourni |
-| **Optionnel** | `=?` | Peut être `~` |
+| **Optionnel** | `=?` | Peut être `_` |
 | **Défaut** | `=default` | Valeur par défaut |
 
 ### Exemples
@@ -274,7 +274,7 @@ $query = 'set-level beginner';
 
 // Optionnel
 $signature = 'set-level ::level->[beginner,middle,master]=?';
-$query = 'set-level ~';
+$query = 'set-level _';
 // level = null
 
 // Avec commentaire

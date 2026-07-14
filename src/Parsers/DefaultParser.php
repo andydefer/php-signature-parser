@@ -11,7 +11,7 @@ use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 
 final class DefaultParser implements ParserInterface
 {
-    private const SKIP_TOKEN = '~';
+    private const SKIP_TOKEN = '_';
 
     public function parse(array $signature, array $query): ParsedResultRecord
     {

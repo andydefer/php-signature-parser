@@ -126,7 +126,7 @@ final class TextFormatterTest extends TestCase
 
     public function test_handles_tilde_as_null(): void
     {
-        $data = ['value' => '~'];
+        $data = ['value' => '_'];
 
         $result = TextFormatter::format($data);
 
@@ -144,19 +144,19 @@ final class TextFormatterTest extends TestCase
 
     public function test_escapes_double_tilde(): void
     {
-        $data = ['value' => '~~'];
+        $data = ['value' => '__'];
 
         $result = TextFormatter::format($data);
 
-        $this->assertSame('~', $result['value']);
+        $this->assertSame('_', $result['value']);
     }
 
     public function test_format_string_handles_all_special_tokens(): void
     {
         $this->assertNull(TextFormatter::formatString('?'));
-        $this->assertNull(TextFormatter::formatString('~'));
+        $this->assertNull(TextFormatter::formatString('_'));
         $this->assertSame('?', TextFormatter::formatString('??'));
-        $this->assertSame('~', TextFormatter::formatString('~~'));
+        $this->assertSame('_', TextFormatter::formatString('__'));
         $this->assertSame('Hello World', TextFormatter::formatString('Hello^World'));
         $this->assertSame('normal string', TextFormatter::formatString('normal string'));
         $this->assertSame('', TextFormatter::formatString(''));
@@ -170,11 +170,11 @@ final class TextFormatterTest extends TestCase
             'name' => 'John^Doe',
             'age' => 30,
             'active' => true,
-            'tags' => ['PHP^8.4', '??', '~'],
+            'tags' => ['PHP^8.4', '??', '_'],
             'config' => [
                 'env' => '?',
                 'debug' => false,
-                'skip' => '~~',
+                'skip' => '__',
             ],
         ];
 
@@ -186,7 +186,7 @@ final class TextFormatterTest extends TestCase
         $this->assertSame(['PHP 8.4', '?', null], $result['tags']);
         $this->assertNull($result['config']['env']);
         $this->assertFalse($result['config']['debug']);
-        $this->assertSame('~', $result['config']['skip']);
+        $this->assertSame('_', $result['config']['skip']);
     }
 
     // ==================== REAL-WORLD EXAMPLES ====================
@@ -199,7 +199,7 @@ final class TextFormatterTest extends TestCase
             'format' => 'tar.gz',
             'excludes' => ['cache^folder', 'logs^folder'],
             'env' => '?',
-            'verbose' => '~',
+            'verbose' => '_',
         ];
 
         $result = TextFormatter::format($data);
@@ -265,8 +265,8 @@ final class TextFormatterTest extends TestCase
             'first' => 'John^Doe',
             'second' => '?',
             'third' => '??',
-            'fourth' => '~',
-            'fifth' => '~~',
+            'fourth' => '_',
+            'fifth' => '__',
         ];
 
         $result = TextFormatter::format($data);
