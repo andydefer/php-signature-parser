@@ -408,4 +408,88 @@ final class EnumParserTest extends TestCase
         $this->assertTrue($result->isValid);
         $this->assertEmpty($result->errors);
     }
+
+    public function test_parse_handles_nullable_enum_with_star(): void
+    {
+        $signature = ['maintenance', '::command->[up,down]', '::target->[local,production]=*'];
+        $query = ['maintenance', 'up', 'local'];
+
+        $result = $this->parser->parse($signature, $query);
+
+        $data = $result->data->toArray();
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('command', $data['enums']);
+        $this->assertSame('up', $data['enums']['command']['value']);
+        $this->assertSame(['up', 'down'], $data['enums']['command']['allowed_values']);
+        $this->assertArrayHasKey('target', $data['enums']);
+        $this->assertSame('local', $data['enums']['target']['value']);
+        $this->assertSame(['local', 'production'], $data['enums']['target']['allowed_values']);
+        $this->assertSame(['maintenance'], $result->signature->toArray());
+        $this->assertSame(['maintenance'], $result->query->toArray());
+    }
+
+    public function test_parse_handles_nullable_enum_with_star_when_target_is_omitted(): void
+    {
+        $signature = ['maintenance', '::command->[up,down]', '::target->[local,production]=*'];
+        $query = ['maintenance', 'down'];
+
+        $result = $this->parser->parse($signature, $query);
+
+        $data = $result->data->toArray();
+        $this->assertArrayHasKey('enums', $data);
+        $this->assertArrayHasKey('command', $data['enums']);
+        $this->assertSame('down', $data['enums']['command']['value']);
+        $this->assertArrayHasKey('target', $data['enums']);
+        $this->assertNull($data['enums']['target']['value']);
+        $this->assertSame(['maintenance'], $result->signature->toArray());
+        $this->assertSame(['maintenance'], $result->query->toArray());
+    }
+
+    public function test_validate_returns_invalid_for_nullable_star_when_required_value_omitted(): void
+    {
+        $signature = ['maintenance', '::command->[up,down]', '::target->[local,production]=*'];
+        $query = ['maintenance'];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Missing required enum value for 'command'", $result->errors->first());
+        $this->assertStringContainsString('up, down', $result->suggestions->first());
+    }
+
+    public function test_validate_returns_invalid_for_nullable_star_with_invalid_command(): void
+    {
+        $signature = ['maintenance', '::command->[up,down]', '::target->[local,production]=*'];
+        $query = ['maintenance', 'toggle', 'local'];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Invalid value 'toggle' for enum 'command'", $result->errors->first());
+        $this->assertStringContainsString('up, down', $result->suggestions->first());
+    }
+
+    public function test_validate_returns_invalid_for_nullable_star_with_invalid_target(): void
+    {
+        $signature = ['maintenance', '::command->[up,down]', '::target->[local,production]=*'];
+        $query = ['maintenance', 'up', 'staging'];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertFalse($result->isValid);
+        $this->assertStringContainsString("Invalid value 'staging' for enum 'target'", $result->errors->first());
+        $this->assertStringContainsString('local, production', $result->suggestions->first());
+    }
+
+    public function test_validate_returns_valid_for_nullable_star_with_both_values(): void
+    {
+        $signature = ['maintenance', '::command->[up,down]', '::target->[local,production]=*'];
+        $query = ['maintenance', 'up', 'production'];
+
+        $result = $this->parser->validate($signature, $query);
+
+        $this->assertTrue($result->isValid);
+        $this->assertEmpty($result->errors);
+        $this->assertEmpty($result->suggestions);
+    }
 }

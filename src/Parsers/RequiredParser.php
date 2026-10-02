@@ -12,7 +12,8 @@ use AndyDefer\SignatureParser\Records\ValidationResultRecord;
 /**
  * Extracts required arguments from a signature and query.
  *
- * Required arguments are simple tokens without '=', '*', '?', or '--' prefix.
+ * Required arguments are simple tokens without '=', '*', '?', '--' prefix,
+ * and without the enum prefix '::'.
  * They must appear in the query in the order they are defined.
  *
  * @example
@@ -106,6 +107,7 @@ final class RequiredParser implements ParserInterface
      * Determines if an element is a required argument.
      *
      * Required arguments are simple tokens without:
+     * - '::' (enum prefix)
      * - '=' (default or nullable)
      * - '*' (variadic)
      * - '?' (nullable)
@@ -113,6 +115,10 @@ final class RequiredParser implements ParserInterface
      */
     private function isRequiredArgument(string $element): bool
     {
+        if (str_starts_with($element, '::')) {
+            return false;
+        }
+
         return ! str_contains($element, '=')
             && ! str_contains($element, '*')
             && ! str_ends_with($element, '?')
